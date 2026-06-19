@@ -77,13 +77,15 @@ def cmd_cal():
     setpoints = []
     for i in range(num_setpoints):
         sp = float(input(f'Setpoint {i+1} [{unit}]: '))
-        setpoints.append(sp)
+        percent = float(input(f'Setpoint {i+1} error tolerance [%]'))
+        max_err = 0.01*percent*sp
+        setpoints.append((sp, max_err))
 
     input('press ENTER to begin calibration')
 
     times = []
     values = []
-    for sp in setpoints:
+    for sp, max_err in setpoints:
         regs = write_float(sp)
         slave.write_registers(address=108, values=regs) # Write to Setpoint pressure
         # Next 3 lines mimick "Set Pressure" button on Unistream HMI
@@ -96,7 +98,6 @@ def cmd_cal():
         sp_start_time = time.time()
         sp_timeout = False
         # Wait for the setpoint to settle.
-        max_err = 0.05*sp
         settle_start = None
         while True:
             # Read MKS 1 for PID process variable.
