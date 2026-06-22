@@ -22,16 +22,20 @@ units = {
 
 def read_float(regs, swapped=True):
     '''
-    Translates a Modbus 32-bit float from a 2-register list into a usable number.
-    The register bits may be in a reverse order; if the numbers are all weird this is likely why.
+    Modbus stores 32-bit floats in two separate registers which must be "translated" 
+    into a normal floating point number.
+    Translates a 2-register list into a python float32.
+    The order of the two registers may be swapped; this is likely the case if the numbers are all weird.
     '''
     if swapped:
             regs = regs[::-1]
     packed = struct.pack('>HH', regs[0], regs[1])
     return struct.unpack('>f', packed)[0]
+
 def write_float(value, swapped=True):
     '''
-    Translates a f32-bit float into the proper 2-register format for Modbus.
+    Performs the reverse operation of read_float.
+    Translates a normal python 32-bit float into a list of two registers for Modbus.
     '''
     packed = struct.pack('>f', value)
     regs = struct.unpack('>HH', packed)
