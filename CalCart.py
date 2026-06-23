@@ -98,21 +98,9 @@ def record_data(setpoint_wait, sample_rate, times, cal, uut):
         time.sleep(1.0 / sample_rate)
     return times, cal, uut
 
-
 def cmd_stop():
     slave.close()
     exit()
-def cmd_status():
-    # Read pressure sensor input registers
-    transducer_registers = {'MKS 1': 100, 'MKS 2': 102, 'MKS 3': 104, 'MKS Zero': 106}
-    transducer_values = {}
-    for t in transducer_registers:
-        resp = slave.read_input_registers(address=transducer_registers[t], count=2)
-        if resp.isError():
-            print(f'[WARMING] {t}: read error.')
-        value = read_float(resp.registers)
-        transducer_values[t] = value
-        print(f'{t}: {value:.2f} {unit}')
 
 def cmd_status():
     '''
@@ -145,14 +133,15 @@ def cmd_cal():
     setpoints = []
     for i in range(num_setpoints):
         sp = float(input(f'Setpoint {i+1} [{unit}]: '))
-        percent = float(input(f'Setpoint {i+1} error tolerance [%]'))
+        percent = float(input(f'Setpoint {i+1} error tolerance [%]: '))
         max_err = 0.01*percent*sp
         setpoints.append((sp, max_err))
 
     input('press ENTER to begin calibration')
 
     times = []
-    values = []
+    cal = []
+    err = []
     for sp, max_err in setpoints:
         regs = write_float(sp)
         slave.write_registers(address=108, values=regs) # Write to Setpoint pressure
@@ -203,10 +192,10 @@ def cmd_cal():
         if sp_timeout:
             continue
         else:
-            times, values = record_data(setpoint_wait, sample_rate, times, values)
+            times, cal, uut = record_data(setpoint_wait, sample_rate, times, cal, uut)
             print(f'[STATUS] Finished recording for setpoint ({sp} {unit}).')
     
-    df = pd.DataFrame({'time': times, 'pressure': values})
+    df = pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
 
     print('[STATUS] Calibration complete. Save results...')
     saved = False
