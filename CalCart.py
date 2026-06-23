@@ -4,8 +4,9 @@ import time
 import pandas as pd
 from tkinter import filedialog
 import tkinter as tk
-
-
+import configparser
+import sys
+import subprocess
 
 PLC_IP = "192.168.1.12"
 slave = ModbusTcpClient(PLC_IP, timeout=3)
@@ -98,57 +99,113 @@ def record_data(setpoint_wait, sample_rate, times, cal, uut):
         time.sleep(1.0 / sample_rate)
     return times, cal, uut
 
-def cmd_stop():
-    slave.close()
-    exit()
-
 def cmd_status():
     '''
     Reads pressure sensor input registers.
-    Reads all current Modbus addresses.
     '''
     # Read pressure sensor input registers
-    transducer_registers = {'MKS 1': 100, 'MKS 2': 102, 'MKS 3': 104, 'MKS Zero': 106}
+    transducer_registers = {'MKS 1': 100, 'MKS 2': 102, 'MKS 3': 104, 'MKS Zero': 106} # This is dated and kind of redundant but I can't be bothered to change it.
     transducer_values = {}
     for t in transducer_registers:
         resp = slave.read_input_registers(address=transducer_registers[t], count=2)
         if resp.isError():
-            print(f'[WARMING] {t}: read error.')
+            print(f'[WARNING] {t}: read error.')
+            continue
         value = read_float(resp.registers)
         transducer_values[t] = value
         print(f'{t}: {value:.2f} {unit}')
-        print('--')
-    # Read all other sensors
-    for a in ad:
-        resp = slave.read_input_registers(address=ad[a], count=2)
-        if resp.isError():
-            print(f'[WARMING] {a}: read error.')
-        print(f'{a}: {resp}')
+
+def cmd_new_config():
+    '''
+    Creates a new .ini configuration for the calibration sequence and saves it.
+    This becomes the active configuration should a calibration sequence be started.
+    
+    '''
+    global config
+    config = configparser.ConfigParser()
+
+    config['DEFAULT'] = {
+        'setpoint_wait': input('Setpoint wait time [s]: '),
+        'sample_rate': input('Sample rate [Hz]: '),
+        'setpoint_settle': input('Setpoint settling time [s]: '),
+    }
+    num_setpoints = input('Number of setpoints: ')
+    config['DEFAULT']['num_setpoints'] = num_setpoints
+
+    for i in range(int(num_setpoints)):
+        pressure = float(input(f'Setpoint {i+1} [{unit}]: '))
+        percent = float(input(f'Setpoint {i+1} error tolerance [%]: '))
+        max_err = 0.01*percent*pressure
+        config[f'setpoint.{i+1}'] = {
+             'pressure': str(pressure),
+             'max_err': str(max_err)
+        }
+    # Save the configuration
+    print('[STATUS] Finished configuring. Save the configuration file... ')
+    save_path = filedialog.asksaveasfilename(
+        defaultextension='.ini',
+        filetypes=[("INI file", "*.ini")]
+    )
+    if not save_path:
+        print('[STATUS] Save cancelled.')
+        return
+    if not save_path.endswith('.ini'):
+        print('[WARNING] Configuration file not saved as .ini. Cancelling...')
+        return
+    else:
+        with open(save_path, 'w') as configfile:
+            config.write(configfile)
+        print('[STATUS] Configuration saved.')
+
+def cmd_load_config():
+    '''
+    Loads an existing configuration.
+    This can also be done when executing the program (see main block)
+    '''
+    global config
+    config = configparser.ConfigParser()
+    load_path = filedialog.askopenfilename(
+        defaultextension='.ini',
+        filetypes=[("INI file", "*.ini")]
+    )
+    config.read(load_path)
+    print(f'[STATUS] Opened configuration file {load_path}')
 
 def cmd_cal():
-    setpoint_wait = float(input('Setpoint wait time [s]: '))
-    sample_rate = float(input('Sample rate [Hz]: '))
-    setpoint_settle = float(input('Setpoint settling time [s]: '))
-    num_setpoints = int(input('Number of setpoints: '))
+    '''
+    Using the parameters in the configuration file, runs a calibration sequence.
+    '''
+    if config is None:
+        print(
+            '''You need a configuration file to run the calibration sequence. 
+            To make a new configuration file, use `new config`.
+            To load an existing configuration, use `load config`.'''
+        )
+        return
+    
+    # Retrieve config data
+    setpoint_wait = float(config['DEFAULT']['setpoint_wait'])
+    sample_rate = float(config['DEFAULT']['sample_rate'])
+    setpoint_settle = float(config['DEFAULT']['setpoint_settle'])
+    num_setpoints = int(config['DEFAULT']['num_setpoints'])
     setpoints = []
     for i in range(num_setpoints):
-        sp = float(input(f'Setpoint {i+1} [{unit}]: '))
-        percent = float(input(f'Setpoint {i+1} error tolerance [%]: '))
-        max_err = 0.01*percent*sp
+        sp = float(config[f'setpoint.{i+1}']['pressure'])
+        max_err = float(config[f'setpoint.{i+1}']['max_err'])
         setpoints.append((sp, max_err))
 
-    input('press ENTER to begin calibration')
-
+    # Begin calibration sequence
     times = []
     cal = []
-    err = []
+    uut = []
     for sp, max_err in setpoints:
         regs = write_float(sp)
-        slave.write_registers(address=108, values=regs) # Write to Setpoint pressure
+        slave.write_registers(address=ad['Setpoint pressure'], values=regs) # Write to Setpoint pressure
         # Next 3 lines mimick "Set Pressure" button on Unistream HMI
-        slave.write_coil(address=0, value=True) # write to submit_setpoint
-        slave.write_coil(address=2, value=True) # write to run_PID
-        slave.write_coil(address=0, value=False) # reset the submit_setpoint coil (setpoint is written via positive transition contact)
+        slave.write_coil(address=ad['submit_setpoint'], value=True) # write to submit_setpoint
+        time.sleep(1.0) # Wait for the submit_setpoint bit to adjust <--yay this fixed it!
+        slave.write_coil(address=ad['submit_setpoint'], value=False) # reset the submit_setpoint coil (setpoint is written via positive transition contact)
+        slave.write_coil(address=ad['run_PID'], value=True) # write to run_PID
         print(f'[STATUS] Adjusting pressure to setpoint ({sp} {unit})...')
         # Establish a max time in case setpoint is unreachable
         sp_timeout_time = 300 # timeout after 5 minutes
@@ -158,7 +215,7 @@ def cmd_cal():
         settle_start = None
         while True:
             # Read MKS 1 for PID process variable.
-            resp = slave.read_input_registers(address=100, count=2)
+            resp = slave.read_input_registers(address=ad['MKS 1 pressure'], count=2)
             if resp.isError():
                 print('[WARNING] read error')
                 continue
@@ -214,19 +271,25 @@ def cmd_cal():
             print('[WARNING] Incorrect file type.')
             continue
 
+def cmd_stop():
+    slave.close()
+    sys.exit()
 
 # Command name dictionary
 
 commands = {
-    'stop': cmd_stop,
+    'help': lambda: print(commands.keys()),
     'status': cmd_status,
+    'new config': cmd_new_config,
+    'load config': cmd_load_config,
     'cal': cmd_cal,
-    'help': lambda: print(commands.keys())
+    'stop': cmd_stop,
+    'cls': lambda: subprocess.run('cls', shell=True)
 }
 # ------------------------------------------
 
 def main():
-    global unit
+    global unit, config
     
     root = tk.Tk()
     root.withdraw()
@@ -242,6 +305,11 @@ def main():
         units_idx = resp.registers[0]
         unit = units[units_idx]
         print(f'System using pressure units: {unit}')
+
+    if len(sys.argv) == 2:
+        config = configparser.ConfigParser()
+        config.read(sys.argv[1])
+        print(f'[STATUS] Opened configuration file {sys.argv[1]}')
 
     while True: 
         # Read commands
