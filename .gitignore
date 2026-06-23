@@ -1,4 +1,4 @@
 .vscode
 CalCart_MEDIA
-ViewResults.ipynb
+*.ipynb
 *.csv

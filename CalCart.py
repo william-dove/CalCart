@@ -9,6 +9,22 @@ import tkinter as tk
 
 PLC_IP = "192.168.1.12"
 slave = ModbusTcpClient(PLC_IP, timeout=3)
+
+# Modbus address dictionary (dict key == UniLogic variable name)
+ad = {
+    'submit_setpoint': 0,
+    'run_autotune': 1,
+    'run_PID': 2,
+    'MKS 1 pressure': 100,
+    'MKS 2 pressure': 102,
+    'MKS 3 pressure': 104,
+    'MKS Zero pressure': 106,
+    'Setpoint pressure': 108,
+    'pressure_units': 110,
+    'UUT pressure': 111
+}
+
+# Pressure units dictionary (dict key == value of pressure_units variable in UniLogic)
 units = {
     0: 'Torr',
     1: 'micron',
@@ -43,19 +59,44 @@ def write_float(value, swapped=True):
             regs = regs[::-1]
     return list(regs)
 
-def record_data(setpoint_wait, sample_rate, times, values):
+def record_data(setpoint_wait, sample_rate, times, cal, uut):
+    '''
+    Once a setpoint is reached, samples data from the MKS 1 sensor on the cart
+    as well as the unit under test at a regular sampling rate, for a designated
+    amount of time.
+
+    :param setpoint_wait: How long the system maintains and collects data at a given setpoint.
+    :param sample_rate: The data sampling rate in Hz
+    :param times: An existing list of times corresponding to sample points from previous setpoints. This function appends new times.
+    :param cal: The existing list of sample points from previous setpoints for the MKS 1 sensor.
+    :param uut: The existing list of sample points from previous setpoints for the unit under test.
+    :return times: The same as the input but appended with new sample point times.
+    :return cal: The same as the input but appended with new sample point pressures.
+    :return uut: The same as the input but appended with new sample point pressures.
+    '''
     record_start = time.time()
     while time.time() - record_start < setpoint_wait:
-        resp = slave.read_input_registers(address=100, count=2)
+        # Collect data from MKS 1 sensor
+        resp = slave.read_input_registers(address=ad['MKS 1 pressure'], count=2)
         if resp.isError():
             print('[WARNING] read error')
             time.sleep(1.0 / sample_rate)
             continue
-        value = read_float(resp.registers)
+        cal_value = read_float(resp.registers)
+        # Collect data from UUT
+        resp = slave.read_input_registers(address=ad['UUT pressure'], count=2)
+        if resp.isError():
+            print('[WARNING] read error')
+            time.sleep(1.0 / sample_rate)
+            continue
+        uut_value = read_float(resp.registers)
+        # Append data
         times.append(time.time())
-        values.append(value)
+        cal.append(cal_value)
+        uut.append(uut_value)
+        # Wait
         time.sleep(1.0 / sample_rate)
-    return times, values
+    return times, cal, uut
 
 
 def cmd_stop():
@@ -72,6 +113,29 @@ def cmd_status():
         value = read_float(resp.registers)
         transducer_values[t] = value
         print(f'{t}: {value:.2f} {unit}')
+
+def cmd_status():
+    '''
+    Reads pressure sensor input registers.
+    Reads all current Modbus addresses.
+    '''
+    # Read pressure sensor input registers
+    transducer_registers = {'MKS 1': 100, 'MKS 2': 102, 'MKS 3': 104, 'MKS Zero': 106}
+    transducer_values = {}
+    for t in transducer_registers:
+        resp = slave.read_input_registers(address=transducer_registers[t], count=2)
+        if resp.isError():
+            print(f'[WARMING] {t}: read error.')
+        value = read_float(resp.registers)
+        transducer_values[t] = value
+        print(f'{t}: {value:.2f} {unit}')
+        print('--')
+    # Read all other sensors
+    for a in ad:
+        resp = slave.read_input_registers(address=ad[a], count=2)
+        if resp.isError():
+            print(f'[WARMING] {a}: read error.')
+        print(f'{a}: {resp}')
 
 def cmd_cal():
     setpoint_wait = float(input('Setpoint wait time [s]: '))
