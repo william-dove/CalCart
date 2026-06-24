@@ -343,6 +343,7 @@ def cmd_gui():
     '''
     Launches the gui
     '''
+    return
     
 # Command name dictionary
 
