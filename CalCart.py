@@ -16,6 +16,7 @@ ad = {
     'submit_setpoint': 0,
     'run_autotune': 1,
     'run_PID': 2,
+    'PID Configuration.Autotune Done': 3,
     'MKS 1 pressure': 100,
     'MKS 2 pressure': 102,
     'MKS 3 pressure': 104,
@@ -43,6 +44,9 @@ def read_float(regs, swapped=True):
     into a normal floating point number.
     Translates a 2-register list into a python float32.
     The order of the two registers may be swapped; this is likely the case if the numbers are all weird.
+
+    :param regs: list of two registers--the `.registers` attribute of the `slave.read_input_registers()` method.
+    :return: 32-bit python float
     '''
     if swapped:
             regs = regs[::-1]
@@ -53,6 +57,9 @@ def write_float(value, swapped=True):
     '''
     Performs the reverse operation of read_float.
     Translates a normal python 32-bit float into a list of two registers for Modbus.
+
+    :param value: 32-bit python float
+    :return: packaged list of registers--pass into the `slave.write_registers()` method.
     '''
     packed = struct.pack('>f', value)
     regs = struct.unpack('>HH', packed)
@@ -87,7 +94,7 @@ def record_data(setpoint_wait, sample_rate, times, cal, uut):
         # Collect data from UUT
         resp = slave.read_input_registers(address=ad['UUT pressure'], count=2)
         if resp.isError():
-            print('[WARNING] read error')
+            print(f'[WARNING] read error: {resp}')
             time.sleep(1.0 / sample_rate)
             continue
         uut_value = read_float(resp.registers)
@@ -99,6 +106,32 @@ def record_data(setpoint_wait, sample_rate, times, cal, uut):
         time.sleep(1.0 / sample_rate)
     return times, cal, uut
 
+def autotune():
+    '''
+    Completes an autotune sequence at the current setpoint.
+    This function assumes that a setpoint has already been set by toggling
+    the submit_setpoint bit.
+
+    :return: False for failure and True for success
+    '''
+    print('[STATUS] Autotuning...')
+    slave.write_coil(address=ad['run_autotune'], value=True)
+
+    timeout = time.time() + 300  # 5 min timeout
+    autotune_complete = False
+    while not autotune_complete:
+        if time.time() > timeout:
+            print('[ERROR] Autotune timeout')
+            return False
+        resp = slave.read_coils(address=ad['PID Configuration.Autotune Done'], count=1)
+        if resp.isError():
+            print(f'[WARNING] read error: {resp}')
+            return False
+        else:
+            autotune_complete = resp.bits[0]
+        time.sleep(1.0)
+    return True
+
 def cmd_status():
     '''
     Reads pressure sensor input registers.
@@ -109,7 +142,7 @@ def cmd_status():
     for t in transducer_registers:
         resp = slave.read_input_registers(address=transducer_registers[t], count=2)
         if resp.isError():
-            print(f'[WARNING] {t}: read error.')
+            print(f'[WARNING] read error: {resp}')
             continue
         value = read_float(resp.registers)
         transducer_values[t] = value
@@ -119,7 +152,6 @@ def cmd_new_config():
     '''
     Creates a new .ini configuration for the calibration sequence and saves it.
     This becomes the active configuration should a calibration sequence be started.
-    
     '''
     global config
     config = configparser.ConfigParser()
@@ -131,6 +163,11 @@ def cmd_new_config():
     }
     num_setpoints = input('Number of setpoints: ')
     config['DEFAULT']['num_setpoints'] = num_setpoints
+    autotune_each = input('Would you like to autotune each setpoint? <yes>/<no>').lower()
+    if autotune_each == 'yes':
+        config['DEFAULT']['autotune_each'] = 'yes'
+    else: # Default to 'no'
+        config['DEFAULT']['autotune_each'] = 'no'
 
     for i in range(int(num_setpoints)):
         pressure = float(input(f'Setpoint {i+1} [{unit}]: '))
@@ -149,7 +186,7 @@ def cmd_new_config():
     if not save_path:
         print('[STATUS] Save cancelled.')
         return
-    if not save_path.endswith('.ini'):
+    elif not save_path.endswith('.ini'):
         print('[WARNING] Configuration file not saved as .ini. Cancelling...')
         return
     else:
@@ -199,25 +236,51 @@ def cmd_cal():
     cal = []
     uut = []
     for sp, max_err in setpoints:
+        # Submit the setpoint
         regs = write_float(sp)
         slave.write_registers(address=ad['Setpoint pressure'], values=regs) # Write to Setpoint pressure
         # Next 3 lines mimick "Set Pressure" button on Unistream HMI
         slave.write_coil(address=ad['submit_setpoint'], value=True) # write to submit_setpoint
         time.sleep(1.0) # Wait for the submit_setpoint bit to adjust <--yay this fixed it!
         slave.write_coil(address=ad['submit_setpoint'], value=False) # reset the submit_setpoint coil (setpoint is written via positive transition contact)
+
+        # If autotune has not yet been completed, run the autotune.
+        resp = slave.read_coils(address=ad['PID Configuration.Autotune Done'], count=1)
+        if resp.isError():
+            print(f'[WARNING] read error: {resp}')
+            autotune_complete = False
+        else:
+            autotune_complete = resp.bits[0]
+        if not autotune_complete:
+            print('[STATUS] No autotune parameters found.')
+            successful = autotune()
+            if not successful:
+                print('[ERROR] Autotune unsuccessful. Aborting calibration sequence.')
+                return
+        elif config['DEFAULT'].getboolean('autotune_each'):
+            print('[STATUS] Adjusting autotune parameters for new setpoint.')
+            successful = autotune()
+            if not successful:
+                print('[ERROR] Autotune unsuccessful. Aborting calibration sequence.')
+                return
+    
+        # Begin PID
+        print(f'[STATUS] Autotune complete. Adjusting pressure to setpoint ({sp} {unit})...')
         slave.write_coil(address=ad['run_PID'], value=True) # write to run_PID
-        print(f'[STATUS] Adjusting pressure to setpoint ({sp} {unit})...')
+        
         # Establish a max time in case setpoint is unreachable
         sp_timeout_time = 300 # timeout after 5 minutes
         sp_start_time = time.time()
         sp_timeout = False
+
         # Wait for the setpoint to settle.
         settle_start = None
         while True:
             # Read MKS 1 for PID process variable.
             resp = slave.read_input_registers(address=ad['MKS 1 pressure'], count=2)
             if resp.isError():
-                print('[WARNING] read error')
+                print(f'[WARNING] read error: {resp}')
+                time.sleep(0.1)
                 continue
             pv = read_float(resp.registers) # process variable
 
@@ -227,6 +290,7 @@ def cmd_cal():
                 print(f'[WARNING] Setpoint is unreachable after {sp_timeout_time}s; Skipping setpoint.')
                 sp_timeout = True
                 break
+
             # Check if the setpoint is settled.
             err = abs(pv - sp) # deviation from setpoint pressure
             if err <= max_err:
