@@ -1,3 +1,4 @@
+#main.py
 # This project
 from modbus.client import Slave
 from config.loader import ConfigLoader
