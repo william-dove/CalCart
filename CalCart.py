@@ -7,6 +7,7 @@ import tkinter as tk
 import configparser
 import sys
 import subprocess
+from utils import read_float, write_float
 
 PLC_IP = "192.168.1.12"
 slave = ModbusTcpClient(PLC_IP, timeout=3)
@@ -37,7 +38,6 @@ units = {
 }
 
 # --------------------------------------- 
-
 def read_float(regs, swapped=True):
     '''
     Modbus stores 32-bit floats in two separate registers which must be "translated" 
@@ -117,7 +117,7 @@ def autotune():
     print('[STATUS] Autotuning...')
     slave.write_coil(address=ad['run_autotune'], value=True)
 
-    timeout = time.time() + 300  # 5 min timeout
+    timeout = time.time() + 600  # 10 min timeout--should be enough but if the autotune isn't finishing by then I can change
     autotune_complete = False
     while not autotune_complete:
         if time.time() > timeout:
@@ -159,7 +159,8 @@ def cmd_new_config():
     config['DEFAULT'] = {
         'setpoint_wait': input('Setpoint wait time [s]: '),
         'sample_rate': input('Sample rate [Hz]: '),
-        'setpoint_settle': input('Setpoint settling time [s]: '),
+        'setpoint_settle': input('Setpoint settling time [s]: '), # setpoint must be within tolerance for this much time to be considered "settled"
+        'setpoint_timeout': input('Setpoint timeout [s]: ')
     }
     num_setpoints = input('Number of setpoints: ')
     config['DEFAULT']['num_setpoints'] = num_setpoints
@@ -224,6 +225,7 @@ def cmd_cal():
     setpoint_wait = float(config['DEFAULT']['setpoint_wait'])
     sample_rate = float(config['DEFAULT']['sample_rate'])
     setpoint_settle = float(config['DEFAULT']['setpoint_settle'])
+    setpoint_timeout = float(config['DEFAULT']['setpoint_timeout'])
     num_setpoints = int(config['DEFAULT']['num_setpoints'])
     setpoints = []
     for i in range(num_setpoints):
@@ -269,9 +271,8 @@ def cmd_cal():
         slave.write_coil(address=ad['run_PID'], value=True) # write to run_PID
         
         # Establish a max time in case setpoint is unreachable
-        sp_timeout_time = 300 # timeout after 5 minutes
-        sp_start_time = time.time()
         sp_timeout = False
+        timeout = time.time() + setpoint_timeout # 10 minute timeout rn
 
         # Wait for the setpoint to settle.
         settle_start = None
@@ -285,9 +286,8 @@ def cmd_cal():
             pv = read_float(resp.registers) # process variable
 
             # Check for timeout
-            sp_elapsed_time = time.time() - sp_start_time
-            if sp_elapsed_time > sp_timeout_time:
-                print(f'[WARNING] Setpoint is unreachable after {sp_timeout_time}s; Skipping setpoint.')
+            if time.time() > timeout:
+                print(f'[WARNING] Setpoint is unreachable after {setpoint_timeout}s; Skipping setpoint.')
                 sp_timeout = True
                 break
 
@@ -339,6 +339,11 @@ def cmd_stop():
     slave.close()
     sys.exit()
 
+def cmd_gui():
+    '''
+    Launches the gui
+    '''
+    
 # Command name dictionary
 
 commands = {
