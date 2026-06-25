@@ -40,18 +40,20 @@ class CLI:
         :param config: class [ConfigLoader] The active configuration.
         '''
         # Set new values for the DEFAULT section
+        print('----------General Settings----------')
         default_values = {
-            'setpoint_wait': input('Setpoint wait time [s]: '),
-            'sample_rate': input('Sample rate [Hz]: '),
-            'setpoint_settle': input('Setpoint settling time [s]: '), # setpoint must be within tolerance for this much time to be considered "settled"
-            'setpoint_timeout': input('Setpoint timeout [s]: '),
-            'num_setpoints':  input('Number of setpoints: '),
-            'autotune_each': input('Would you like to autotune each setpoint? <yes>/<no>: ').lower()
+            'setpoint_wait': input('1. Setpoint wait time [s]: '),
+            'sample_rate': input('2. Sample rate [Hz]: '),
+            'setpoint_settle': input('3. Setpoint settling time [s]: '), # setpoint must be within tolerance for this much time to be considered "settled"
+            'setpoint_timeout': input('4. Setpoint timeout [s]: '),
+            'num_setpoints':  input('5. Number of setpoints: '),
+            'autotune_each': input('6. Autotune each setpoint? <yes>/<no>: ').lower()
         }
         for key, val in default_values.items():
             self.config.setd(key, val)
 
         # Set the new values for the setpoint.i sections
+        print('----------Setpoint Settings----------')
         for i in range(int(default_values['num_setpoints'])):
             pressure = float(input(f'Setpoint {i+1} [{self.unit}]: '))
             percent = float(input(f'Setpoint {i+1} error tolerance [%]: '))
