@@ -6,9 +6,9 @@ This program is designed to control the 2025 IMA Life Portable Vacuum Calibratio
 
 There are two levels of programming within the Cal Cart control system:
 
-- **Lower Level Control:** A Unitronics UniStream PLC/HMI controls basic process functions such as processing sensor signals and maintaining a setpoint pressure. The user may also view real-time sensor data and execute simple tasks using the touchscreen interface on the UniStream HMI. These functions are implemented within UniLogic in `CalCart.ulpr`. UniLogic's built-in Modbus features are used to communicate with a laptop (SCADA) over Ethernet for more complex operations.
+- **Lower Level Control:** A Unitronics UniStream PLC/HMI controls basic process functions such as processing sensor signals and maintaining a setpoint pressure. The user may also view real-time sensor data and execute simple tasks using the touchscreen interface on the UniStream HMI. These functions are implemented using UniLogic within `CalCart.ulpr`. UniLogic's built-in Modbus features are used to communicate with a laptop (SCADA) over Ethernet for more complex operations.
 
-- **Higher Level Control:** A Python application within this repository is installed on on the SCADA to provide higher level controls. The user may develop multi-step calibration sequences and save time-dependant sensor history via the SCADA. 
+- **Higher Level Control:** The Python application within this repository is used by the SCADA to provide higher level controls. The user may develop multi-step calibration sequences and save time-dependant sensor history via the SCADA. 
 
 This documentation will focus on the SCADA Python program providing higher level control during the calibration process. For more information on the mechanical, electrical, and lower-level control features of the Cal Cart, see the functional specification.
 
@@ -81,14 +81,8 @@ When the user enters the "cal" command, `main.py` calls `CLI.cal()`. Within `cli
 Class references can be tracked along the following flow chart:
 
 ```
-main.py is executed -----> `Slave` instance created        -----> `CLI` instance created (referencing ----> 
-                    -----> `ConfigLoader` instance created -----> `Slave` & `ConfigLoader` instances) ----> 
-
----------------------------------------------------------------------------------------------------------
-
----> User loads or creates config ----> `CalibrationSequence` instance created    
----> .ini & enters "cal" command  ---->  using `Slave` & `configloader` references
-
+main.py is executed -----> `Slave` instance created        -----> `CLI` instance created (referencing -----> User loads or creates config -----> `CalibrationSequence` instance created  
+                    -----> `ConfigLoader` instance created -----> `Slave` & `ConfigLoader` instances) -----> .ini & enters "cal" command  ----->  using `Slave` & `configloader` references
 ```
 
 
@@ -96,16 +90,18 @@ main.py is executed -----> `Slave` instance created        -----> `CLI` instance
 
 ### CLI Operation
 
-The user may enter the following commands (no quotes):
+(no quotes)
 
-- "help".........: displays a list of valid commands.
-- "status".......: displays the three pressure transducer readings.
-- "new config"...: begins the procedure for making a new .`ini` using command line user inputs.
-- "load config"..: loads an existing configuration from a `.ini` file.
-- "view config"..: displays the currently active configuration options.
-- "cal"..........: begins the calibration procedure.
-- "stop".........: exits the program.
-- "cls"..........: clears the command promp screen.
+```
+- "help"..............: displays a list of valid commands.
+- "status"............: displays the three pressure transducer readings.
+- "new config"........: begins the procedure for making a new .ini using command line user inputs.
+- "load config".......: loads an existing configuration from a .ini file.
+- "view config".......: displays the currently active configuration options.
+- "cal"...............: begins the calibration procedure.
+- "stop"..............: exits the program.
+- "cls"...............: clears the command promp screen.
+```
 
 ### GUI Operation
 
