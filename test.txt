@@ -1,0 +1,22 @@
+Folder PATH listing for volume OS
+Volume serial number is 00000001 A2E1:32BA
+C:.
++---.vscode
++---CalCart_MEDIA
+¦   +---Audio
+¦   +---Docs
+¦   +---Screenshots
+¦   +---Video
++---calibration
+¦   +---__pycache__
++---cli
+¦   +---__pycache__
++---config
+¦   +---configurations
+¦   +---__pycache__
++---data
++---modbus
+¦   +---__pycache__
++---old
++---utils
+    +---__pycache__
