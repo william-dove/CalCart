@@ -3,8 +3,7 @@
 from modbus.client import Slave
 from config.loader import ConfigLoader
 from cli.cli import CLI
-from calibration.calibration import CalibrationSequence
-from utils.constants import ADDRESSES, UNITS, COMMANDS
+from utils.constants import ADDRESSES, UNITS
 # Other
 import tkinter as tk
 import sys
@@ -30,8 +29,8 @@ if len(sys.argv) == 2:
     config.load(sys.argv[1])
     print(f'[STATUS] Opened configuration file {sys.argv[1]}')
 
-# Initialize command line interface
-cli = CLI(plc, config)
+# Initialize command line interface - references Class variables `plc` and `config` (initialized above)
+cli = CLI(plc, config, ADDRESSES, unit)
 
 # Command name dictionary
 commands = {
@@ -39,7 +38,8 @@ commands = {
     'status': cli.status,
     'new config': cli.new_config,
     'load config': cli.load_config,
-    'cal': cli.cal,
+    'view config': cli.view_config,
+    'cal': cli.cal, # creates a local CalibrationSequence() object as an attribute within the CLI() object
     'stop': lambda: (plc.close(), sys.exit()),
     'cls': lambda: subprocess.run('cls', shell=True)
 }
@@ -55,3 +55,6 @@ def main():
             cmd_func()
         else:
             print("[WARNING] Unknown command.")
+
+if __name__ == "__main__":
+    main()

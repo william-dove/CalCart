@@ -24,8 +24,3 @@ UNITS = {
     4: 'Pascal',
     5: 'kPa'
 }
-
-COMMANDS = {
-    
-}
-

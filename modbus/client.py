@@ -20,9 +20,6 @@ class Slave:
     def connect(self):
         if not self.master.connect():
             raise ConnectionError('PLC connection failed.')
-    
-    def close(self):
-        self.master.close()
 
     def read_float(self, address):
         '''

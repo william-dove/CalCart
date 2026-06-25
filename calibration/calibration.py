@@ -6,7 +6,7 @@ from tkinter import filedialog
 # Defines the calibration sequence.
 
 class CalibrationSequence:
-    def __init__(self, plc, config, addresses, unit):
+    def __init__(self, plc, config, ADDRESSES, unit):
         '''
         :param plc: class Slave
         :param config: class ConfigLoader
@@ -15,10 +15,15 @@ class CalibrationSequence:
         '''
         self.plc = plc # class Slave (defined in `client.py`)
         self.config = config
-        self.ad = addresses # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
+        self.ad = ADDRESSES # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
         self.unit = unit
 
     def run(self):
+        '''
+        Runs a calibration sequence using the plc and config specified during initialization.
+
+        :return: dataframe containing results of calibration sequence.
+        '''
         print('[STATUS] Starting calibration...')
         setpoints = self.config.get_setpoints() # list of tuples of form (<setpoint pressure>, <setpoint error tolerance>)
         times, cal, uut = [], [], [] # Initialize lists for storing results
@@ -36,8 +41,7 @@ class CalibrationSequence:
                 continue
         
         # Save results
-        df = pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
-        self._save_results(df)
+        return pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
         
     # ----------------------------------------------------------------------------------------------------------------------------
 
@@ -91,11 +95,11 @@ class CalibrationSequence:
 
         # Establish a max time in case setpoint is unreachable
         sp_timeout = False
-        setpoint_timeout = float(self.config['DEFAULT']['setpoint_timeout'])
+        setpoint_timeout = self.config.get_default('setpoint_timeout')
         timeout = time.time() + setpoint_timeout # 10 minute timeout rn
 
         # Wait for the setpoint to settle.
-        setpoint_settle = float(self.config['DEFAULT']['setpoint_settle']) # how long the setpoint must be stable to begin data collection.
+        setpoint_settle = self.config.get_default('setpoint_settle') # how long the setpoint must be stable to begin data collection.
         settle_start = None
         while True:
             # Check for timeout
@@ -137,8 +141,8 @@ class CalibrationSequence:
         :return uut: The same as the input but appended with new sample point pressures.
         '''
         # Check settings for how long to record and sampling rate
-        setpoint_wait = float(self.config['DEFAULT']['setpoint_wait'])
-        sample_rate = float(self.config['DEFAULT']['sample_rate'])
+        setpoint_wait = self.config.get_default('setpoint_wait')
+        sample_rate = self.config.get_default('sample_rate')
 
         record_start = time.time()
         while time.time() - record_start < setpoint_wait:
@@ -151,21 +155,3 @@ class CalibrationSequence:
             # Wait
             time.sleep(1.0 / sample_rate)
         return times, cal, uut
-    
-    def _save_results(df):
-        print('[STATUS] Calibration complete. Save results...')
-        saved = False
-        while not saved:
-            save_path = filedialog.asksaveasfilename(
-                defaultextension=".csv",
-                filetypes = [("comma-separated value file", "*.csv"), ("Excel file", "*.xlsx")]
-            )
-            if save_path.endswith(".csv"):
-                df.to_csv(save_path)
-                saved = True
-            elif save_path.endswith(".xlsx"):
-                df.to_excel(save_path)
-                saved = True
-            else:
-                print('[WARNING] Incorrect file type.')
-                continue
