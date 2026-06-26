@@ -1,5 +1,4 @@
 #cli/cli.py
-import sys
 from tkinter import filedialog
 from calibration.calibration import CalibrationSequence
 

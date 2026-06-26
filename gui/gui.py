@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
+from calibration.calibration import CalibrationSequence
 
 class GUI(tk.Tk):
     '''
@@ -17,6 +18,10 @@ class GUI(tk.Tk):
     def __init__(self, plc, config, ADDRESSES, unit):
         super().__init__() # Initialize the parent class
 
+        # Setup gui window
+        self.title("CalCart 2025 IMA Life North America")
+        self.iconbitmap("./gui/logo.ico")
+
         # Initialize object references
         self.plc = plc # stateful reference to variable `plc` in main
         self.config = config # stateful reference to variable `config` in main
@@ -24,54 +29,96 @@ class GUI(tk.Tk):
         self.unit = unit
 
         # Get initial values from the config ddict, then convert them to tkinter StringVars.
-        self.dc = self._getddict() # --dict of DEFAULT section of config INI
+        self._initddict() # --dict of DEFAULT section of config INI
         # Get the INI path as a StringVar
         if self.config.path is not None:
             self.configpath = tk.StringVar(value=self.config.path)
         else:
             self.configpath = tk.StringVar(value='<--- Select a configuration.')
+        # Initialize save results directory
+        self.resultspath = tk.StringVar(value="<--- Choose where to save calibration data.")
 
         # Make the frame
-        self.frm = tk.Frame(self)
-        self.frm.grid() # Use grid to place objects (as opposed to .pack())
+        self.frm = ttk.Frame(self, padding='10')
+        self.frm.pack(fill='both', expand=True)
+        self.frm.columnconfigure(0, weight=0)  # left side stays fixed
+        self.frm.columnconfigure(1, weight=1)  # right side expands
+        self.frm.rowconfigure(1, weight=1)
+        # Make file subframe
+        self.filefrm = ttk.LabelFrame(self.frm, text='File', padding='10')
+        # Make settings subframe
+        self.setfrm = ttk.LabelFrame(self.frm, text="Calibration Sequence Options", padding='10')
+        # Format subframes
+        self.filefrm.grid(column=0, row=0, sticky="ew")
+        #self.setfrm.grid(column=0, row=1, sticky="ew")
+        self.setfrm.grid(column=0, row=1, sticky="nsew")
+        self.filefrm.columnconfigure(1, weight=1)
+        self.setfrm.columnconfigure(1, weight=1)
+        #self.filefrm.grid_propagate(False)
+        #self.filefrm.configure(width=400)
+        #self.setfrm.grid_propagate(False)
+        #self.setfrm.configure(width=400)
+
+        self.filefrm.grid_propagate(False)
+        self.filefrm.configure(width=400, height=120)
+
+        self.setfrm.grid_propagate(False)
+        self.setfrm.configure(width=400, height=300)
+
+
+
 
         # ------------------------------------------------------------------------
 
         # Add GUI elements
         # ~~~~~~~~~~~~~~~~
 
+        # --File--
         # Load config button
-        ttk.Button(self.frm, text="Load Configuration", command=self._load_config).grid(column=0, row=0)
-        ttk.Label(self.frm, textvariable=self.configpath).grid(column=1, row=0)
+        ttk.Button(self.filefrm, text='Load Configuration', command=self._load_config, width='20').grid(column=0, row=0)
+        ttk.Label(self.filefrm, textvariable=self.configpath, anchor="w").grid(column=1, row=0, sticky="ew")
 
+        # Save data button
+        ttk.Button(self.filefrm, text='Results Directory', command=self._choose_resultspath, width='20').grid(column=0, row=1)
+        ttk.Label(self.filefrm, textvariable=self.resultspath, anchor="w").grid(column=1, row=1, sticky="ew")
+
+
+        # --Settings--
         # Setpoint wait
-        ttk.Label(self.frm, text='1. Setpoint wait time [s]: ').grid(column=0, row=1)
-        ttk.Entry(self.frm, textvariable=self.dc['setpoint_wait']).grid(column=1, row=1)
+        ttk.Label(self.setfrm, text='Setpoint wait time [s]: ').grid(column=0, row=1, sticky='e')
+        ttk.Entry(self.setfrm, textvariable=self.dc['setpoint_wait']).grid(column=1, row=1, sticky='w')
 
         # Sample rate
-        ttk.Label(self.frm, text='2. Sample rate [Hz]: ').grid(column=0, row=2)
-        ttk.Entry(self.frm, textvariable=self.dc['sample_rate']).grid(column=1, row=2)
+        ttk.Label(self.setfrm, text='Sample rate [Hz]: ').grid(column=0, row=2, sticky='e')
+        ttk.Entry(self.setfrm, textvariable=self.dc['sample_rate']).grid(column=1, row=2, sticky='w')
 
         # Setpoint settle
-        ttk.Label(self.frm, text='3. Setpoint settling time [s]: ').grid(column=0, row=3)
-        ttk.Entry(self.frm, textvariable=self.dc['setpoint_settle']).grid(column=1, row=3)
+        ttk.Label(self.setfrm, text='Setpoint settling time [s]: ').grid(column=0, row=3, sticky='e')
+        ttk.Entry(self.setfrm, textvariable=self.dc['setpoint_settle']).grid(column=1, row=3, sticky='w')
 
         # Setpoint timeout
-        ttk.Label(self.frm, text='4. Setpoint timeout [s]: ').grid(column=0, row=4)
-        ttk.Entry(self.frm, textvariable=self.dc['setpoint_timeout']).grid(column=1, row=4)
+        ttk.Label(self.setfrm, text='Setpoint timeout [s]: ').grid(column=0, row=4, sticky='e')
+        ttk.Entry(self.setfrm, textvariable=self.dc['setpoint_timeout']).grid(column=1, row=4, sticky='w')
 
         # Number of setpoints
-        ttk.Label(self.frm, text='5. Number of setpoints: ').grid(column=0, row=5)
-        ttk.Entry(self.frm, textvariable=self.dc['num_setpoints']).grid(column=1, row=5)
+        ttk.Label(self.setfrm, text='Number of setpoints: ').grid(column=0, row=5, sticky='e')
+        ttk.Entry(self.setfrm, textvariable=self.dc['num_setpoints']).grid(column=1, row=5, sticky='w')
 
         # Autotune each setpoint
-        ttk.Label(self.frm, text='6. Autotune each setpoint? ').grid(column=0, row=6)
-        ttk.Checkbutton(self.frm, variable=self.dc['autotune_each'], offvalue='no', onvalue='yes').grid(column=1, row=6)
+        ttk.Label(self.setfrm, text='Autotune each setpoint? ').grid(column=0, row=6, sticky='e')
+        ttk.Checkbutton(self.setfrm, variable=self.dc['autotune_each'], offvalue='no', onvalue='yes').grid(column=1, row=6, sticky='w')
 
         # Save buttons
-        ttk.Button(self.frm, text='Apply Changes', command=self._setddict).grid(column=0, row=7)
-        ttk.Button(self.frm, text='Save Configuration', command=self._save_config).grid(column=1, row=7)
+        ttk.Button(self.setfrm, text='Apply Changes', command=self._setddict).grid(column=0, row=7)
+        ttk.Button(self.setfrm, text='Save Configuration', command=self._save_config).grid(column=1, row=7)
 
+
+        # --Run--
+        # Make calibration subframe
+        self.calfrm = ttk.Frame(self.frm, padding='10')
+        self.calfrm.grid(column=1, row=0)
+        ttk.Button(self.calfrm, text='Run\nCalibration\nSequence', command=self._cal).grid(column=0, row=0)
+        ttk.Label(self.calfrm, text='This will eventually be a status update box').grid(column=0, row=1)
 
     def _load_config(self):
         '''
@@ -86,10 +133,16 @@ class GUI(tk.Tk):
             defaultextension='.ini',
             filetypes=[("INI file", "*.ini")]
         )
-        self.config.load(load_path)
-        print(f'[STATUS] Opened configuration file {load_path}')
-        self.configpath.set(load_path)
-        self._getddict()
+        if load_path.endswith('.ini'):
+            self.config.load(load_path)
+            print(f'[STATUS] Opened configuration file {load_path}')
+            self.configpath.set(load_path)
+            # Update self.dc without breaking references
+            dc_new = self.config.getddict()
+            for key, val in dc_new.items():
+                if key in self.dc:
+                    self.dc[key].set(val)
+
 
     def _save_config(self):
         '''
@@ -110,15 +163,17 @@ class GUI(tk.Tk):
             self.config.save(save_path)
             print('[STATUS] Configuration saved.')
 
-    def _getddict(self):
+    def _initddict(self):
         '''
         Retrieves the ddict from the config and converts every string value to a tkinter StringVar.
+
+        Only use this initially! once self.dc references the StringVars, they can't be reassigned.
         '''
         dc_Strings = self.config.getddict()
         dc_StringVars = {}
         for key, val in dc_Strings.items():
             dc_StringVars[key] = tk.StringVar(value=val)
-        return dc_StringVars
+        self.dc = dc_StringVars
     
     def _setddict(self):
         '''
@@ -129,3 +184,25 @@ class GUI(tk.Tk):
         for key, val in self.dc.items():
             dc_Strings[key] = val.get() # Convert from tk.StringVars to normal Strings
         self.config.setddict(dc_Strings)
+
+    def _choose_resultspath(self):
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes = [("comma-separated value file", "*.csv"), ("Excel file", "*.xlsx")]
+        )
+        self.resultspath.set(save_path)
+    
+    def _cal(self):
+        '''
+        For now I will assume the save path is valid; eventually I will add a popup warning if it is not.
+        '''
+        cal_seq = CalibrationSequence(self.plc, self.config, self.ad, self.unit)
+        results = cal_seq.run()
+        # Save results
+        save_path = self.resultspath.get()
+        if save_path.endswith(".csv"):
+            results.to_csv(save_path)
+        elif save_path.endswith(".xlsx"):
+            results.to_excel(save_path)
+        else:
+            print('[WARNING] Incorrect file type; aborting save.')
