@@ -8,11 +8,11 @@ class CLI:
     This class contains all the commands the user may input to the command
     line when using the program.
 
+    __init__ parameters:
     :param plc: [class Slave] Must be initialized in main prior to initializing this class.
     :param config: [class ConfigLoader] See above^.
     :param addresses: ...
     :param unit: ...
-    
     '''
     def __init__(self, plc, config, ADDRESSES, unit):
         self.plc = plc # stateful reference to variable `plc` in main
@@ -49,8 +49,7 @@ class CLI:
             'num_setpoints':  input('5. Number of setpoints: '),
             'autotune_each': input('6. Autotune each setpoint? <yes>/<no>: ').lower()
         }
-        for key, val in default_values.items():
-            self.config.setd(key, val)
+        self.config.setddict(self, default_values)
 
         # Set the new values for the setpoint.i sections
         print('----------Setpoint Settings----------')
@@ -100,6 +99,7 @@ class CLI:
 
         But now it should!
         '''
+        print(self.config.path)
         print(self.config.print_all())
 
 

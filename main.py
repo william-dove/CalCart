@@ -3,6 +3,7 @@
 from modbus.client import Slave
 from config.loader import ConfigLoader
 from cli.cli import CLI
+from gui.gui import GUI
 from utils.constants import ADDRESSES, UNITS
 # Other
 import tkinter as tk
@@ -10,10 +11,6 @@ import sys
 import subprocess
 
 # -----------------------------------------------------------------------
-
-# Initialize tkinter window
-root = tk.Tk()
-root.withdraw()
 
 # Initialize plc communications
 plc = Slave("192.168.1.12")
@@ -29,8 +26,18 @@ if len(sys.argv) == 2:
     config.load(sys.argv[1])
     print(f'[STATUS] Opened configuration file {sys.argv[1]}')
 
+# Initialize tkinter window references Class variables `plc` and `config` (initialized above)
+root = GUI(plc, config, ADDRESSES, unit)
 # Initialize command line interface - references Class variables `plc` and `config` (initialized above)
 cli = CLI(plc, config, ADDRESSES, unit)
+
+# Define shutdown protocol
+def shutdown():
+    plc.close()
+    root.quit()
+    root.destroy()
+    sys.exit()
+root.protocol("WM_DELETE_WINDOW", shutdown)
 
 # Command name dictionary
 commands = {
@@ -40,7 +47,7 @@ commands = {
     'load config': cli.load_config,
     'view config': cli.view_config,
     'cal': cli.cal, # creates a local CalibrationSequence() object as an attribute within the CLI() object
-    'stop': lambda: (plc.close(), sys.exit()),
+    'stop': shutdown,
     'cls': lambda: subprocess.run('cls', shell=True)
 }
 

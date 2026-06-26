@@ -5,14 +5,35 @@ from io import StringIO
 class ConfigLoader:
     def __init__(self):
         self.config = configparser.ConfigParser()
+        self.path = None
+
+        # Define and initialize the default values for the DEFAULT section of the config .ini
+        self.default_values = {
+            'setpoint_wait': '30', # [s]
+            'sample_rate': '10', # [Hz]
+            'setpoint_settle': '60', # [s] # setpoint must be within tolerance for this much time to be considered "settled"
+            'setpoint_timeout': '300', # [s]
+            'num_setpoints':  '1',
+            'autotune_each': 'no'
+        }
+        self.setddict(self.default_values)
+
+        # Define and initialize the default values for the first setpoint
+        self.set(f'setpoint.1', 'pressure', '1') # Units set by the PLC
+        self.set(f'setpoint.1', 'max_err', '0.05')
 
     def load(self, path):
+        '''
+        Overwrites existing settings with those from the given INI
+        '''
         self.config.read(path)
+        self.path = path
         return self
     
     def save(self, path):
         with open(path, 'w') as configfile:
             self.config.write(configfile)
+        self.path = path
 
     def get_setpoints(self):
         '''
@@ -64,6 +85,8 @@ class ConfigLoader:
         :param key: the key of the value
         :param value: the value (string) which you want to store
         '''
+        if not self.config.has_section(section):
+                self.config.add_section(section)
         self.config[section][key] = value
 
     def getdbool(self, key, default=False):
@@ -90,3 +113,18 @@ class ConfigLoader:
         buffer = StringIO()
         self.config.write(buffer)
         return buffer.getvalue()
+    
+    def getddict(self):
+        '''
+        Returns a dict of the DEFAUlT section as strings
+        '''
+        return dict(self.config['DEFAULT'])
+    
+    def setddict(self, dc):
+        '''
+        Sets the default dict back to the DEFAULT section of the INI
+
+        :param dc: The default dict (future: update for clarity)
+        '''
+        for key, val in dc.items():
+            self.setd(key, val)
