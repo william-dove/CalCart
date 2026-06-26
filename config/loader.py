@@ -128,3 +128,11 @@ class ConfigLoader:
         '''
         for key, val in dc.items():
             self.setd(key, val)
+
+    def getspdicts(self):
+        '''
+        returns a nested dictionary of of the setpoint settings
+        '''
+        sps = {}
+        for i in range(self.getd('num_setpoints')):
+            sps[f'setpoint.{i+1}'] = dict(self.config[f'setpoint.{i+1}'])
