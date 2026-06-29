@@ -1,6 +1,7 @@
 #config/loader.py
 import configparser
 from io import StringIO
+import os
 
 class ConfigLoader:
     def __init__(self):
@@ -26,9 +27,12 @@ class ConfigLoader:
         '''
         Overwrites existing settings with those from the given INI
         '''
-        self.config.read(path)
-        self.path = path
-        return self
+        if os.path.isfile(path):
+            self.config.read(path)
+            self.path = path
+            return self
+        else:
+            raise ValueError('Configuration file not found.')
     
     def save(self, path):
         with open(path, 'w') as configfile:
@@ -134,5 +138,6 @@ class ConfigLoader:
         returns a nested dictionary of of the setpoint settings
         '''
         sps = {}
-        for i in range(self.getd('num_setpoints')):
+        for i in range(self.getd('num_setpoints', cast=int)):
             sps[f'setpoint.{i+1}'] = dict(self.config[f'setpoint.{i+1}'])
+        return sps
