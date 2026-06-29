@@ -77,27 +77,32 @@ class GUI(tk.Tk):
         frm.columnconfigure(1, weight=1)  # right side expands
         frm.rowconfigure(1, weight=1)
 
-        # --File Subframe--
+
+        # --Subframes--
+        # File subframe (Top)
         filefrm = ttk.LabelFrame(frm, text='File', padding='10')
         filefrm.grid(column=0, row=0, columnspan=2, sticky="ew")
         filefrm.columnconfigure(1, weight=1)
         filefrm.grid_propagate(False)
         filefrm.configure(width=800, height=120)
 
-        # --General [DEFAULT] Settings Subframe--
+        # General [DEFAULT] settings subframe (Bottom left)
         setfrm = ttk.LabelFrame(frm, text="Calibration Sequence Options", padding='10')
         setfrm.grid(column=0, row=1, sticky="nsew")
         setfrm.columnconfigure(1, weight=1)
         setfrm.grid_propagate(False)
         setfrm.configure(width=400, height=300)
 
-        # --Setpoint Settings Subframe--
-        spfrm = ttk.LabelFrame(frm, text="Setpoints", padding='10')
-        spfrm.grid(column=1, row=1, sticky='nsew')
-        spfrm.columnconfigure(1, weight=1)
-        spfrm.grid_propagate(False)
-        spfrm.configure(width=400, height=300)
+        # Setpoint settings subframe (Bottom right)
+        self._spfrm = ttk.LabelFrame(frm, text="Setpoints", padding='10')
+        self._spfrm.grid(column=1, row=1, sticky='nsew')
+        self._spfrm.columnconfigure(1, weight=1)
+        self._spfrm.grid_propagate(False)
+        self._spfrm.configure(width=400, height=300)
 
+        # Calibration subframe (Far right)
+        calfrm = ttk.Frame(frm, padding='10')
+        calfrm.grid(column=2, row=0, rowspan=2, sticky='nsew')
 
         # ------------------------------------------------------------------------
 
@@ -105,69 +110,20 @@ class GUI(tk.Tk):
         # ~~~~~~~~~~~~~~~~
 
         # --File--
-        # Load config button
-        ttk.Button(filefrm, text='Load Configuration', command=self._load_config, width='20').grid(column=0, row=0)
-        ttk.Label(filefrm, textvariable=self._configpath, anchor="w").grid(column=1, row=0, sticky="ew")
-
-        # Save data button
-        ttk.Button(filefrm, text='Results Directory', command=self._choose_resultspath, width='20').grid(column=0, row=1)
-        ttk.Label(filefrm, textvariable=self._resultspath, anchor="w").grid(column=1, row=1, sticky="ew")
-
-        # Save buttons
-        ttk.Button(filefrm, text='Apply Changes', command=self._setddict).grid(column=0, row=2)
-        ttk.Button(filefrm, text='Save Configuration', command=self._save_config).grid(column=1, row=2)
-
+        self._set_filefrm(filefrm)
 
         # --Settings--
-        # Setpoint wait
-        ttk.Label(setfrm, text='Setpoint wait time [s]: ').grid(column=0, row=1, sticky='e')
-        ttk.Entry(setfrm, textvariable=self._dconfig['setpoint_wait']).grid(column=1, row=1, sticky='w')
+        self._set_genfrm(setfrm)
 
-        # Sample rate
-        ttk.Label(setfrm, text='Sample rate [Hz]: ').grid(column=0, row=2, sticky='e')
-        ttk.Entry(setfrm, textvariable=self._dconfig['sample_rate']).grid(column=1, row=2, sticky='w')
-
-        # Setpoint settle
-        ttk.Label(setfrm, text='Setpoint settling time [s]: ').grid(column=0, row=3, sticky='e')
-        ttk.Entry(setfrm, textvariable=self._dconfig['setpoint_settle']).grid(column=1, row=3, sticky='w')
-
-        # Setpoint timeout
-        ttk.Label(setfrm, text='Setpoint timeout [s]: ').grid(column=0, row=4, sticky='e')
-        ttk.Entry(setfrm, textvariable=self._dconfig['setpoint_timeout']).grid(column=1, row=4, sticky='w')
-
-        # Number of setpoints
-        ttk.Label(setfrm, text='Number of setpoints: ').grid(column=0, row=5, sticky='e')
-        ttk.Entry(setfrm, textvariable=self._dconfig['num_setpoints']).grid(column=1, row=5, sticky='w')
-
-        # Autotune each setpoint
-        ttk.Label(setfrm, text='Autotune each setpoint? ').grid(column=0, row=6, sticky='e')
-        ttk.Checkbutton(setfrm, variable=self._dconfig['autotune_each'], offvalue='no', onvalue='yes').grid(column=1, row=6, sticky='w')
-
-        # Setpoints
-        # In the future, I will make the `spfrm` frame into a canvas, in order to add scrolling if too many 
-        # setpoints are added to display at once on the screen.
-        num_setpoints = self.config.getd('num_setpoints', cast=int)
-        spfrms = {}
-        for i in range(num_setpoints):
-            spfrms[i+1] = ttk.LabelFrame(spfrm, text=f'Setpoint {i+1}')
-            spfrms[i+1].grid(column=0, row=i)
-
-            # Setpoint pressure
-            ttk.Label(spfrms[i+1], text=f'Setpoint pressure [{self.unit}]: ').grid(column=0, row=0, sticky='e')
-            ttk.Entry(spfrms[i+1], textvariable=self._spconfigs[f'setpoint.{i+1}']['pressure']).grid(column=1, row=0, sticky='w')
-
-            # Setpoint error tolerance
-            ttk.Label(spfrms[i+1], text=f'Setpoint error tolerance [{self.unit}]: ').grid(column=0, row=1, sticky='e')
-            ttk.Entry(spfrms[i+1], textvariable=self._spconfigs[f'setpoint.{i+1}']['max_err']).grid(column=1, row=1, sticky='w')
-        
-
+        # --Setpoint Settings--
+        self._set_spfrms()
 
         # --Run--
-        # Make calibration subframe
-        calfrm = ttk.Frame(frm, padding='10')
-        calfrm.grid(column=1, row=0)
         ttk.Button(calfrm, text='Run\nCalibration\nSequence', command=self._cal).grid(column=0, row=0)
         ttk.Label(calfrm, text='This will eventually be a status update box').grid(column=0, row=1)
+
+    # -----------------------------------------------------------------------------------------------------
+
 
     def _load_config(self):
         '''
@@ -191,13 +147,10 @@ class GUI(tk.Tk):
             for key, val in dconfig_new.items():
                 if key in self._dconfig:
                     self._dconfig[key].set(val)
-            # Update self._spconfigs without breaking references
-            spconfigs_new = self.config.getspdicts()
-            for i in range(self.config.getd('num_setpoints', cast=int)):
-                for key, val in spconfigs_new[f'setpoint.{i+1}'].items():
-                    if key in self._spconfigs:
-                        self._spconfigs[f'setpoint.{i+1}'][key].set(val)
-
+            # Replace self._spconfigs with new references
+            self._initspdicts()
+            # Refresh/rebuild the setpoint settings window with the new references
+            self._set_spfrms()
 
     def _save_config(self):
         '''
@@ -246,6 +199,11 @@ class GUI(tk.Tk):
     def _initspdicts(self):
         '''
         Reads the setpoint dicts from the loaded config (if it exists) or the default options (one setpoint).
+
+        Unlike ._initddict(), this one can be called again for a new or updated configuration since the whole
+        ._spfrm window is regenerated with new widgets, which can be bound to the new StringVars.
+
+        [FUTURE]: I should just do the same thing with the general settings to make things less confusing.
         '''
         sp_dict_Strings = self.config.getspdicts()
         sp_dict_StringVars = {}
@@ -277,3 +235,72 @@ class GUI(tk.Tk):
             results.to_excel(save_path)
         else:
             print('[WARNING] Incorrect file type; aborting save.')
+
+    
+    def _clear_frame(self, frame):
+        for child in frame.winfo_children():
+            child.destroy()
+
+    def _set_spfrms(self):
+        '''
+        In the future, I will make the `self._spfrm` frame into a canvas, in order to add scrolling if too many 
+        setpoints are added to display at once on the screen.
+        '''
+        self._clear_frame(self._spfrm)
+        num_setpoints = self.config.getd('num_setpoints', cast=int)
+        spfrms = {}
+        for i in range(num_setpoints):
+            spfrms[i+1] = ttk.LabelFrame(self._spfrm, text=f'Setpoint {i+1}')
+            spfrms[i+1].grid(column=0, row=i)
+
+            # Setpoint pressure
+            ttk.Label(spfrms[i+1], text=f'Setpoint pressure [{self.unit}]: ').grid(column=0, row=0, sticky='e')
+            ttk.Entry(spfrms[i+1], textvariable=self._spconfigs[f'setpoint.{i+1}']['pressure']).grid(column=1, row=0, sticky='w')
+
+            # Setpoint error tolerance
+            ttk.Label(spfrms[i+1], text=f'Setpoint error tolerance [{self.unit}]: ').grid(column=0, row=1, sticky='e')
+            ttk.Entry(spfrms[i+1], textvariable=self._spconfigs[f'setpoint.{i+1}']['max_err']).grid(column=1, row=1, sticky='w')
+
+    def _set_genfrm(self, setfrm):
+        '''
+        Sets up all the widgets within the general [DEFAULT] settings section.
+        '''
+        # Setpoint wait
+        ttk.Label(setfrm, text='Setpoint wait time [s]: ').grid(column=0, row=1, sticky='e')
+        ttk.Entry(setfrm, textvariable=self._dconfig['setpoint_wait']).grid(column=1, row=1, sticky='w')
+
+        # Sample rate
+        ttk.Label(setfrm, text='Sample rate [Hz]: ').grid(column=0, row=2, sticky='e')
+        ttk.Entry(setfrm, textvariable=self._dconfig['sample_rate']).grid(column=1, row=2, sticky='w')
+
+        # Setpoint settle
+        ttk.Label(setfrm, text='Setpoint settling time [s]: ').grid(column=0, row=3, sticky='e')
+        ttk.Entry(setfrm, textvariable=self._dconfig['setpoint_settle']).grid(column=1, row=3, sticky='w')
+
+        # Setpoint timeout
+        ttk.Label(setfrm, text='Setpoint timeout [s]: ').grid(column=0, row=4, sticky='e')
+        ttk.Entry(setfrm, textvariable=self._dconfig['setpoint_timeout']).grid(column=1, row=4, sticky='w')
+
+        # Number of setpoints
+        ttk.Label(setfrm, text='Number of setpoints: ').grid(column=0, row=5, sticky='e')
+        ttk.Entry(setfrm, textvariable=self._dconfig['num_setpoints']).grid(column=1, row=5, sticky='w')
+
+        # Autotune each setpoint
+        ttk.Label(setfrm, text='Autotune each setpoint? ').grid(column=0, row=6, sticky='e')
+        ttk.Checkbutton(setfrm, variable=self._dconfig['autotune_each'], offvalue='no', onvalue='yes').grid(column=1, row=6, sticky='w')
+
+    def _set_filefrm(self, filefrm):
+        '''
+        Same thing for the file frame
+        '''
+        # Load config button
+        ttk.Button(filefrm, text='Load Configuration', command=self._load_config, width='20').grid(column=0, row=0)
+        ttk.Label(filefrm, textvariable=self._configpath, anchor="w").grid(column=1, row=0, sticky="ew")
+
+        # Save data button
+        ttk.Button(filefrm, text='Results Directory', command=self._choose_resultspath, width='20').grid(column=0, row=1)
+        ttk.Label(filefrm, textvariable=self._resultspath, anchor="w").grid(column=1, row=1, sticky="ew")
+
+        # Save buttons
+        ttk.Button(filefrm, text='Apply Changes', command=self._setddict).grid(column=0, row=2, sticky='w')
+        ttk.Button(filefrm, text='Save Configuration', command=self._save_config).grid(column=1, row=2, sticky='w')
