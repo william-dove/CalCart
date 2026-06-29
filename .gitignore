@@ -1,5 +1,7 @@
-.vscode
-CalCart_MEDIA
+.vscode/
+CalCart_MEDIA/
+__pycache__/
+*.pyc
 *.ipynb
 *.csv
 *.xlsx
