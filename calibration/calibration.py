@@ -95,11 +95,11 @@ class CalibrationSequence:
 
         # Establish a max time in case setpoint is unreachable
         sp_timeout = False
-        setpoint_timeout = self.config.getd('setpoint_timeout')
+        setpoint_timeout = self.config.getg('setpoint_timeout')
         timeout = time.time() + setpoint_timeout # 10 minute timeout rn
 
         # Wait for the setpoint to settle.
-        setpoint_settle = self.config.getd('setpoint_settle') # how long the setpoint must be stable to begin data collection.
+        setpoint_settle = self.config.getg('setpoint_settle') # how long the setpoint must be stable to begin data collection.
         settle_start = None
         while True:
             # Check for timeout
@@ -141,8 +141,8 @@ class CalibrationSequence:
         :return uut: The same as the input but appended with new sample point pressures.
         '''
         # Check settings for how long to record and sampling rate
-        setpoint_wait = self.config.getd('setpoint_wait')
-        sample_rate = self.config.getd('sample_rate')
+        setpoint_wait = self.config.getg('setpoint_wait')
+        sample_rate = self.config.getg('sample_rate')
 
         record_start = time.time()
         while time.time() - record_start < setpoint_wait:

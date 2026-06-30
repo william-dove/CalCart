@@ -35,12 +35,11 @@ class CLI:
         *Changing self.config SHOULD mutate the `config = ConfigLoader()` object initialized in `main.py`
         ...but who knows. At any rate I'll just use this class attribute when running a calibration sequence
         or changing config parameters.
-
-        :param config: class [ConfigLoader] The active configuration.
         '''
+        config_dict = {}
         # Set new values for the DEFAULT section
         print('----------General Settings----------')
-        default_values = {
+        config_dict['general'] = {
             'setpoint_wait': input('1. Setpoint wait time [s]: '),
             'sample_rate': input('2. Sample rate [Hz]: '),
             'setpoint_settle': input('3. Setpoint settling time [s]: '), # setpoint must be within tolerance for this much time to be considered "settled"
@@ -48,18 +47,21 @@ class CLI:
             'num_setpoints':  input('5. Number of setpoints: '),
             'autotune_each': input('6. Autotune each setpoint? <yes>/<no>: ').lower()
         }
-        self.config.setddict(self, default_values)
 
         # Set the new values for the setpoint.i sections
         print('----------Setpoint Settings----------')
-        for i in range(int(default_values['num_setpoints'])):
+        num_setpoints = int(config_dict['general']['num_setpoints'])
+        for i in range(num_setpoints):
             pressure = float(input(f'Setpoint {i+1} [{self.unit}]: '))
             percent = float(input(f'Setpoint {i+1} error tolerance [%]: '))
             max_err = 0.01*percent*pressure
-            self.config.set(f'setpoint.{i+1}', 'pressure', str(pressure))
-            self.config.set(f'setpoint.{i+1}', 'max_err', str(max_err))
+            config_dict[f'setpoint.{i+1}'] = {
+                'pressure': str(pressure),
+                'max_err': str(max_err)
+            }
 
         # Save the configuration
+        self.config.set_dict(config_dict)
         print('[STATUS] Finished configuring. Save the configuration file... ')
         save_path = filedialog.asksaveasfilename(
             defaultextension='.ini',

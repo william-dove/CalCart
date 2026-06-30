@@ -9,6 +9,7 @@ from utils.constants import ADDRESSES, UNITS
 import tkinter as tk
 import sys
 import subprocess
+import threading
 
 # -----------------------------------------------------------------------
 
@@ -46,22 +47,30 @@ commands = {
     'new config': cli.new_config,
     'load config': cli.load_config,
     'view config': cli.view_config,
-    'cal': cli.cal, # creates a local CalibrationSequence() object as an attribute within the CLI() object
+    'cal': cli.cal, # creates a local CalibrationSequence() object as an attribute within the cli or gui.
     'stop': shutdown,
     'cls': lambda: subprocess.run('cls', shell=True)
 }
 
 # ---------------------------------------------------------------------------------
-
-def main():
+def ioloop():
     while True: 
         # Read commands
         command = input('(CalCart.py)>')
-        cmd_func = commands.get(command)
-        if cmd_func:
-            cmd_func()
+        # If a process is running from the gui, don't interpret the command
+        if root.is_busy:
+            print('Calibration in progress, please wait...')
         else:
-            print("[WARNING] Unknown command.")
+            cmd_func = commands.get(command)
+            if cmd_func:
+                cmd_func()
+            else:
+                print("[WARNING] Unknown command.")
+
+def main():
+    cli_thread = threading.Thread(target=ioloop, daemon=True)
+    cli_thread.start()
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
