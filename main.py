@@ -34,6 +34,13 @@ cli = CLI(plc, config, ADDRESSES, unit)
 
 # Define shutdown protocol
 def shutdown():
+    '''
+    Safely closes the program. Activated either by the red X in the GUI
+    or the `stop` command in the CLI.
+
+    * I'm not sure how the `stop` command will function now that CLI commands are 
+    being executed on a separate thread. Maybe it will still work?
+    '''
     plc.close()
     root.quit()
     root.destroy()
@@ -54,6 +61,14 @@ commands = {
 
 # ---------------------------------------------------------------------------------
 def ioloop():
+    '''
+    Everything executed from the command line executes here, while the 
+    main thread is busy running tkinter.
+
+    Eventually I might move command execution to the main thread,
+    but for the time being this seems to work fine and the main thread
+    is already busy with the gui.
+    '''
     while True: 
         # Read commands
         command = input('(CalCart.py)>')
@@ -68,8 +83,10 @@ def ioloop():
                 print("[WARNING] Unknown command.")
 
 def main():
-    cli_thread = threading.Thread(target=ioloop, daemon=True)
-    cli_thread.start()
+    threading.Thread(
+        target=ioloop, 
+        daemon=True
+    ).start()
     root.mainloop()
 
 if __name__ == "__main__":

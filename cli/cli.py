@@ -1,6 +1,8 @@
 #cli/cli.py
 from tkinter import filedialog
 from calibration.calibration import CalibrationSequence
+import os
+import threading
 
 class CLI:
     '''
@@ -62,20 +64,21 @@ class CLI:
 
         # Save the configuration
         self.config.set_dict(config_dict)
-        print('[STATUS] Finished configuring. Save the configuration file... ')
-        save_path = filedialog.asksaveasfilename(
-            defaultextension='.ini',
-            filetypes=[("INI file", "*.ini")]
-        )
-        if not save_path:
-            print('[STATUS] Save cancelled.')
-            return
-        elif not save_path.endswith('.ini'):
-            print('[WARNING] Configuration file not saved as .ini. Cancelling...')
-            return
-        else:
-            self.config.save(save_path)
-            print('[STATUS] Configuration saved.')
+        print('[STATUS] Finished configuring. Enter save directory/filename (*.ini):')
+        # save_path = filedialog.asksaveasfilename(
+        #     defaultextension='.ini',
+        #     filetypes=[("INI file", "*.ini")]
+        # )
+        saved = False
+        while not saved:
+            save_path = input('>')
+            save_dir, save_filename = os.path.split(save_path)
+            if os.path.isdir(save_dir) and save_filename.endswith('.ini'):
+                self.config.save(save_path)
+                print('[STATUS] Configuration saved.')
+                saved = True
+            else:
+                print('[WARNING] Invalid path or configuration file not saved as .ini.')
 
     def load_config(self):
         '''
@@ -86,12 +89,17 @@ class CLI:
         ...but who knows. At any rate I'll just use this class attribute when running a calibration sequence
         or changing config parameters.
         '''
-        load_path = filedialog.askopenfilename(
-            defaultextension='.ini',
-            filetypes=[("INI file", "*.ini")]
-        )
-        self.config.load(load_path)
-        print(f'[STATUS] Opened configuration file {load_path}')
+        print('Enter a configuration file directory:')
+        # load_path = filedialog.askopenfilename(
+        #     defaultextension='.ini',
+        #     filetypes=[("INI file", "*.ini")]
+        # )
+        load_path = input('>')
+        if os.path.isfile(load_path) and load_path.endswith('.ini'):
+            self.config.load(load_path)
+            print(f'[STATUS] Opened configuration file {load_path}')
+        else:
+            print(f'[WARNING] No such configuration file {load_path}')
 
     def view_config(self):
         '''
@@ -128,3 +136,73 @@ class CLI:
                 print('[WARNING] Incorrect file type.')
                 continue
 
+    # ----------------------------------------------------------------------------------------------------------------------
+
+    # Everything below should be unnecessary.
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    # I thought I would need to do the same thing I did to the GUI, i.e. run the calibration sequence
+    # on a worker thread to avoid blocking the main thread, which is now burdened with keeping the tkinter
+    # gui running. However, I forgot that I already sent all cli stuff to another thread executing `main.ioloop()`,
+    # which is totally ok to block while executing longer functions like the calibration sequence. That being said,
+    # I'm still going to leave everything below commented out since I think it's good practice to open worker threads
+    # for stuff like this and it *should* work as written. However, as they say, if it ain't broke don't fix it--so
+    # for the time being I'm going to stick to the method above.
+
+    # def cal(self):
+    #     '''
+    #     Opens a worker thread to run the calibration sequence.
+    #     Will need to use the same method for printing messages to the console
+    #     while this is running.
+    #     '''
+    #     # Enter save path for when finished.
+    #     print('Enter a save directory/filename for the results (*.csv, *.xlsx):')
+    #     saved = False
+    #     while not saved:
+    #         save_path = input('>')
+    #         save_dir, save_filename = os.path.split(save_path)
+    #         if os.path.isdir(save_dir):
+    #             if save_filename.endswith('.xlsx') or save_filename.endswith('.csv'):
+    #                 self._resultspath = save_path
+    #                 saved=True
+    #         else:
+    #             print('[WARNING] Invalid path or configuration file not saved as .ini.')
+
+    #     # Begin calibration
+    #     print('[cli]\n') # Temporary fix for messages popping up during the cli input loop (same as GUI)
+
+    #     threading.Thread(
+    #         target=self._run_calibration,
+    #         daemon=True
+    #     ).start()
+
+    # def _run_calibration(self):
+    #     '''
+    #     Runs the calibration sequence in a new thread.
+    #     When complete, activates callback function `._cal_finished`.
+    #     '''
+    #     try:
+    #         cal_seq = CalibrationSequence(
+    #             self.plc,
+    #             self.config,
+    #             self.ad,
+    #             self.unit
+    #         )
+
+    #         results = cal_seq.run()
+
+    #         save_path = self._resultspath
+
+    #         if save_path.endswith(".csv"):
+    #             results.to_csv(save_path, index=False)
+    #         elif save_path.endswith(".xlsx"):
+    #             results.to_excel(save_path, index=False)
+
+    #     except Exception as e:
+    #         print(f"[ERROR] {e}")
+
+    # def _message(self, msg):
+    #     '''
+    #     Prints a message while the input loop is active.
+    #     '''
+    #     print('[cli]\n' + msg + '\n(CalCart.py)>')
