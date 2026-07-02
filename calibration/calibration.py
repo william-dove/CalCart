@@ -31,7 +31,10 @@ class CalibrationSequence:
         # Build results list
         for sp, max_err in setpoints:
             self._apply_setpoint(sp)
-            self._check_autotune()
+            if self.config.getgbool('autotune_each'):
+                self._autotune()
+            else:
+                self._check_autotune()
             settled = self._set_pressure(sp, max_err)
             if settled:
                 times, cal, uut = self._record_data(times, cal, uut)

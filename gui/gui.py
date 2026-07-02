@@ -66,6 +66,9 @@ class GUI(tk.Tk):
         # Make indicator to block the cli from input
         self.is_busy = False
 
+        # Initialize the status variable
+        self._statusvar = tk.StringVar(value='Status: waiting for action...')
+
 
         # ---------------------------------------------------------------------------------------------
 
@@ -126,9 +129,13 @@ class GUI(tk.Tk):
 
         # --Calibration Run Frame--
         ttk.Button(calfrm, text='Run\nCalibration\nSequence', command=self._cal).grid(column=0, row=0)
-        ttk.Label(calfrm, text='This will eventually be a status update box').grid(column=0, row=1)
+        ttk.Label(
+            calfrm, 
+            text=f'Active pressure units: {self.unit}.\nChange pressure units on PLC prior to starting application (will change)'
+        ).grid(column=0, row=1)
+        ttk.Label(calfrm, textvariable=self._statusvar).grid(column=0, row=2)
         self._progressbar = ttk.Progressbar(calfrm, orient='horizontal', mode='indeterminate', length=350)
-        self._progressbar.grid(column=0, row=2, pady=5)
+        self._progressbar.grid(column=0, row=3, pady=5)
 
     # -----------------------------------------------------------------------------------------------------
 
@@ -316,6 +323,7 @@ class GUI(tk.Tk):
             self._message('[WARNING] Configuration file not saved as .ini. Cancelling...')
         else:
             self.config.save(save_path)
+            self._configpath.set(save_path)
             self._message('[STATUS] Configuration saved.')
 
     # -----------------------------------------------------------------------------------------------------------------------
