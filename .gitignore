@@ -1,6 +1,7 @@
 .vscode/
 CalCart_MEDIA/
 __pycache__/
+data/
 *.pyc
 *.ipynb
 *.csv

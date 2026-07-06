@@ -44,6 +44,7 @@ class CalibrationSequence:
                 continue
         
         # Save results
+        print('[STATUS] Calibration sequence complete!')
         return pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
         
     # ----------------------------------------------------------------------------------------------------------------------------
@@ -55,6 +56,7 @@ class CalibrationSequence:
 
         :param sp: the setpoint pressure.
         '''
+        print(f'[STATUS] Submitting setpoint ({sp} {self.unit})...')
         self.plc.write_float(self.ad['Setpoint pressure'], sp)
         self.plc.write_coil(self.ad['submit_setpoint'], value=True)
         time.sleep(1.0) # Wait for the submit_setpoint bit to adjust <--yay this fixed it!
@@ -63,6 +65,7 @@ class CalibrationSequence:
     def _check_autotune(self):
         autotune_complete = self.plc.read_coil(self.ad['PID Configuration.Autotune Done'])
         if autotune_complete:
+            print(f'[STATUS] Autotune already completed for this calibration sequence.')
             return
         else:
             print('[STATUS] No autotune parameters found.')
@@ -77,9 +80,12 @@ class CalibrationSequence:
         :return: False for failure and True for success
         '''
         print('[STATUS] Autotuning...')
+        self.plc.write_coil(self.ad['run_PID'], value=False) # (experimental) this may not do anything but it couldn't hurt and might be good
         self.plc.write_coil(self.ad['run_autotune'], value=True)
         
         timeout = time.time() + 600 # 10 min timeout--should be enough but if the autotune isn't finishing by then I can change
+
+        time.sleep(1.0) # Let the system start the autotune process before querying if it is complete.
 
         autotune_complete = False
         while not autotune_complete:
@@ -93,7 +99,7 @@ class CalibrationSequence:
         '''
         :return: True for successful settling, False for timeout.
         '''
-        print(f'[STATUS] Adjusting pressure to setpoint ({sp} {self.unit})...')
+        print(f'[STATUS] Attempting to reach setpoint ({sp} {self.unit})...')
         self.plc.write_coil(self.ad['run_PID'], value=True)
 
         # Establish a max time in case setpoint is unreachable

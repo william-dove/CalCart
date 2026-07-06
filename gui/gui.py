@@ -371,7 +371,7 @@ class GUI(tk.Tk):
         if self.is_busy:
             self._message('[STATUS] Calibration already in progress.')
             return
-        print('[gui]\n') # Temporary fix for messages popping up during the cli input loop (see CLI messaging below)
+        print('[gui]') # Temporary fix for messages popping up during the cli input loop (see CLI messaging below)
         self.is_busy = True
         self._progressbar.start()
 
@@ -414,6 +414,8 @@ class GUI(tk.Tk):
     def _cal_finished(self):
         self.is_busy = False
         self._progressbar.stop()
+        print(f'[STATUS] Calibration data saved to {self._resultspath.get()}')
+        print('(CalCart.py)>', end='') # Same fix as earlier--exit "Calibration mode" for terminal
 
     # -------------------------------------------------------------------------------------------------------------------------
 
@@ -428,7 +430,8 @@ class GUI(tk.Tk):
     # regenerate the command prompt.
 
     def _message(self, msg):
-        print('[gui]\n' + msg + '\n(CalCart.py)>')
+        #print('[gui]\n' + msg + '\n(CalCart.py)>')
+        print('[gui]\n' + msg + '\n(CalCart.py)>', end='')
     # -------------------------------------------------------------------------------------------------------------------------
 
     # (DEPRECATED) configuration settings methods
