@@ -142,3 +142,7 @@ Important things to have:
 - Add information such as customer info, model number, etc. into the INI file (probably under a new section called "customer")
 - Provide the option to generate a report for the calibration using this info and a default template.
 - Don't let the user proceed with the calibration unless all required customer info has been entered.
+
+### Other
+
+- Eventually: Look into using serial communication to automatically control the turbo pump. Ideally through the PLC so I could automatically use it for startup/for maintaining a PID setpoint.
