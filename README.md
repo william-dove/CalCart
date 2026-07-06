@@ -15,14 +15,14 @@ This documentation will focus on the SCADA Python application providing higher l
 
 ## Table of Contents
 
-- Version Requirements
-- Features
-    - Filetree
-    - Startup
-    - Class Reference Heirarchy
-- Usage
-    - CLI Operation
-    - GUI Operation
+- [Version Requirements](# Version Requirements)
+- [Features](# Features)
+    - [Filetree](# Filetree)
+    - [Startup](# Startup)
+    - [Class Reference Heirarchy](# Class Reference Heirarchy)
+- [Usage](# Usage)
+    - [CLI Operation][#]
+    - [GUI Operation][]
 - Future
 
 
@@ -115,7 +115,30 @@ The GUI should be fairly straightforward; for a more detailed description see th
 
 ## Future
 
+### Todo
+
 - Safer blocking between main thread (GUI), IO thread (CLI) and temp worker threads (CalibrationSequence)
 - Ability to change pressure units from SCADA
 - Print to PDF calibration report
 - More status updates in GUI
+
+### Startup procedure (PLC code)
+
+- Add in a startup screen (e.g., "would you like to begin start up process?")
+- Prompt user to begin using vacuum pump (switching valves accordingly).
+- Wait for MKS Zero reference to show the pressure as under 100 microns--when pressure < 100 microns, prompt user to turn on turbo pump (possibly block turbo pump power through a relay until this threshold is reached, then energize relay when pressure < 100 microns).
+- Once turbo pump is running, prompt user to wait until 4 hours have passed (for the transducers to warm up--start the timer as soon as power is on), OR until pressure is low enough to zero the 3 transducers--whichever comes last.
+- Once the time is up, prompt the user to zero the three transducers. Once zeroed, exit the startup mode.
+Important things to have:
+- Use the system time for the 4 hr timer, this way if the system gets shut off it doesn't automatically reset. Actually, probably the best way to implement this is by adding a check on startup--if the system was running less than 15 minutes ago, don't run startup, or at least make it an option to skip.
+
+### Moving CLI into GUI
+
+- Removing direct command line access to centralize the program in the tkinter thread.
+- Create embedded terminal window in the gui
+
+### Generate reports based on excel template
+
+- Add information such as customer info, model number, etc. into the INI file (probably under a new section called "customer")
+- Provide the option to generate a report for the calibration using this info and a default template.
+- Don't let the user proceed with the calibration unless all required customer info has been entered.
