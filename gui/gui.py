@@ -2,8 +2,11 @@
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
 import threading
 from calibration.calibration import CalibrationSequence
+import sys
+
 
 class GUI(tk.Tk):
     '''
@@ -44,6 +47,7 @@ class GUI(tk.Tk):
         # Setup gui window
         self.title("CalCart 2025 IMA Life North America")
         self.iconbitmap("./gui/logo.ico")
+        self.protocol("WM_DELETE_WINDOW", self._shutdown)
 
         # Initialize object references
         self.plc = plc # stateful reference to variable `plc` in main
@@ -69,6 +73,13 @@ class GUI(tk.Tk):
         # Initialize the status variable
         self._statusvar = tk.StringVar(value='Status: waiting for action...')
 
+        # Initialize command dicitonary
+        commands = {
+            'help': lambda: self._log(commands.keys()),
+            'status': self._status,
+            'stop': self._shutdown,
+            'cls': self._clear
+        }
 
         # ---------------------------------------------------------------------------------------------
 
@@ -109,10 +120,13 @@ class GUI(tk.Tk):
         self._spfrm.grid_propagate(False)
         self._spfrm.configure(width=400, height=300)
 
-        # Calibration subframe (Far right)
+        # Calibration subframe (Far top right)
         calfrm = ttk.Frame(frm, padding='10')
-        calfrm.grid(column=2, row=0, rowspan=2, sticky='nsew')
+        calfrm.grid(column=2, row=0, sticky='nsew')
 
+        # Console (Far bottom right)
+        confrm = ttk.LabelFrame(frm, text='Console', padding='10')
+        confrm.grid(column=2, row=1, sticky='ns')
         # ------------------------------------------------------------------------
 
         # Add GUI elements
@@ -128,14 +142,28 @@ class GUI(tk.Tk):
         self._set_spfrm()
 
         # --Calibration Run Frame--
-        ttk.Button(calfrm, text='Run\nCalibration\nSequence', command=self._cal).grid(column=0, row=0)
-        ttk.Label(
-            calfrm, 
-            text=f'Active pressure units: {self.unit}.\nChange pressure units on PLC prior to starting application (will change)'
-        ).grid(column=0, row=1)
-        ttk.Label(calfrm, textvariable=self._statusvar).grid(column=0, row=2)
+        ttk.Button(
+            calfrm, text='Run\nCalibration\nSequence', command=self._cal
+        ).grid(column=0, row=0, rowspan=2, padx=10, sticky='ns')
+
+        ttk.Label(calfrm, textvariable=self._statusvar).grid(column=1, row=0)
         self._progressbar = ttk.Progressbar(calfrm, orient='horizontal', mode='indeterminate', length=350)
-        self._progressbar.grid(column=0, row=3, pady=5)
+        self._progressbar.grid(column=1, row=1, pady=5, padx=10)
+
+        # --Console Frame--
+        self._console = ScrolledText(confrm, font=('Consolas', 11), height=12)
+        self._console.pack(fill='both', expand=True)
+        self._console.insert(tk.END, 'Application started.\n')
+        self._console.config(state='disabled') # Stop the user from writing in the console window.
+
+        entrybox = tk.Frame(confrm)
+        entrybox.pack(fill='x')
+
+        tk.Label(entrybox, text='>', font=('Consolas', 11)).pack(side='left', padx=(5,2))
+        self._entry = tk.Entry(entrybox, font=('Consolas', 11))
+        self._entry.pack(side='left', fill='x', expand=True, padx=(0,5))
+        self._entry.bind("<Return>", self._execute)
+
 
     # -----------------------------------------------------------------------------------------------------
 
@@ -477,3 +505,41 @@ class GUI(tk.Tk):
         for config_key, config_val in self._dconfig.items():
             dconfig_Strings[config_key] = config_val.get() # Convert from tk.StringVars to normal Strings
         self.config.setddict(dconfig_Strings)
+
+    def _log(self, msg):
+        '''
+        Sends a message to the console window.
+        '''
+        self._console.config(state='normal')
+        self._console.insert(tk.END, msg+'\n')
+        self._console.see(tk.END)
+        self._console.config(state='disabled')
+
+    def _execute(self, event=None):
+        command = self._entry.get()
+        self._entry.delete(0, tk.END)
+
+        self._log(f'>{command}')
+
+        return # Add executor here.
+
+    def _shutdown(self):
+        '''
+        Safely closes the program. Activated either by the red X in the GUI
+        or the `stop` command in the CLI.
+
+        * I'm not sure how the `stop` command will function now that CLI commands are 
+        being executed on a separate thread. Maybe it will still work?
+        '''
+        self.plc.close()
+        self.quit()
+        self.destroy()
+        sys.exit()
+    
+    def _clear(self):
+        '''
+        Clears the console window.
+        '''
+        self._console.config(state='normal')
+        self._console.delete('1.0', tk.END)
+        self._console.config(state='disabled')
