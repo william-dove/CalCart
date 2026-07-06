@@ -15,15 +15,15 @@ This documentation will focus on the SCADA Python application providing higher l
 
 ## Table of Contents
 
-- [Version Requirements](# Version Requirements)
-- [Features](# Features)
-    - [Filetree](# Filetree)
-    - [Startup](# Startup)
-    - [Class Reference Heirarchy](# Class Reference Heirarchy)
-- [Usage](# Usage)
-    - [CLI Operation][#]
-    - [GUI Operation][]
-- Future
+- [Version Requirements](#version-requirements)
+- [Features](#features)
+    - [Filetree](#filetree)
+    - [Startup](#startup)
+    - [Class Reference Heirarchy](#class-reference-heirarchy)
+- [Usage](#usage)
+    - [CLI Operation][#cli-operation]
+    - [GUI Operation][#gui-operation]
+- [Future](#future)
 
 
 ## Version Requirements
