@@ -21,8 +21,8 @@ This documentation will focus on the SCADA Python application providing higher l
     - [Startup](#startup)
     - [Class Reference Heirarchy](#class-reference-heirarchy)
 - [Usage](#usage)
-    - [CLI Operation][#cli-operation]
-    - [GUI Operation][#gui-operation]
+    - [CLI Operation](#cli-operation)
+    - [GUI Operation](#gui-operation)
 - [Future](#future)
 
 
