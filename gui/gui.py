@@ -48,7 +48,7 @@ class GUI(tk.Tk):
         # Setup gui window
         self.title("CalCart 2025 IMA Life North America")
         self.iconbitmap("./gui/logo.ico")
-        self.protocol("WM_DELETE_WINDOW", self._shutdown)
+        self.protocol("WM_DELETE_WINDOW", self._cmd_shutdown)
 
         # Initialize object references
         self.plc = plc # stateful reference to variable `plc` in main
@@ -76,10 +76,12 @@ class GUI(tk.Tk):
 
         # Initialize command dicitonary
         self._commands = {
-            'help': lambda: self._log(self._commands.keys()),
-            'status': self._status,
-            'stop': self._shutdown,
-            'cls': self._clear
+            'help': self._cmd_help,
+            'status': self._cmd_status,
+            'stop': self._cmd_shutdown,
+            'cls': self._cmd_clear,
+            'echo': self._cmd_echo,
+            'busy': self._cmd_make_busy
         }
 
         # ---------------------------------------------------------------------------------------------
@@ -455,18 +457,22 @@ class GUI(tk.Tk):
         self.after(0, lambda: self._log(msg))
 
     def _execute(self, event=None):
-        command = self._entry.get()
+        raw = self._entry.get()
+        if not raw:
+            return
         self._entry.delete(0, tk.END)
 
-        self._log(f'>{command}')
+        command, *args = raw.split(' ')
+
+        self._log(f'>{raw}')
 
         cmd_func = self._commands.get(command)
         if cmd_func:
-            cmd_func()
+            cmd_func(args)
         else:
             self._log('[WARNING] Unknown command.')
 
-    def _shutdown(self):
+    def _cmd_shutdown(self, args=None):
         '''
         Safely closes the program. Activated either by the red X in the GUI
         or the `stop` command in the CLI.
@@ -474,12 +480,20 @@ class GUI(tk.Tk):
         * I'm not sure how the `stop` command will function now that CLI commands are 
         being executed on a separate thread. Maybe it will still work?
         '''
+        if args and args[0] == 'hard':
+            self._log('[STATUS] Aborting...')
+        elif self.is_busy:
+            self._log('[WARNING] Calibration in progress. Please wait for it to finish before closing the program.')
+            return
+        else:
+            self._log('[STATUS] Exiting...')
+
         self.plc.close()
         self.quit()
         self.destroy()
         sys.exit()
     
-    def _clear(self):
+    def _cmd_clear(self, args=None):
         '''
         Clears the console window.
         '''
@@ -487,14 +501,39 @@ class GUI(tk.Tk):
         self._console.delete('1.0', tk.END)
         self._console.config(state='disabled')
 
-    def _status(self):
+    def _cmd_status(self, args=None):
         '''
+        Shows active pressure units.
         Reads pressure sensor input registers.
         '''
+        self._log(f'System using pressure units: {self.unit}')
         transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
         for t in transducers:
             value = self.plc.read_float(self.ad[t])
             self._log(f'{t}: {value:.2f} {self.unit}')
+
+    def _cmd_help(self, args=None):
+        '''
+        Lists available commands in the embedded CLI.
+        '''
+        self._log('Available commands:')
+        for cmd in self._commands.keys():
+            self._log(f'  {cmd}')
+
+    def _cmd_echo(self, args):
+        '''
+        Echoes the input arguments back to the console.
+        '''
+        self._log(' '.join(args))
+
+    def _cmd_make_busy(self, args=None):
+        '''
+        For testing purposes
+        '''
+        if self.is_busy:
+            self.is_busy = False
+        else:
+            self.is_busy = True
 
     # -------------------------------------------------------------------------------------------------------------------------
 
