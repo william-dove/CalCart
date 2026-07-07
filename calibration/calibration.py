@@ -2,11 +2,12 @@
 import time
 import pandas as pd
 from tkinter import filedialog
+from utils.constants import ADDRESSES
 
 # Defines the calibration sequence.
 
 class CalibrationSequence:
-    def __init__(self, plc, config, ADDRESSES, unit, log_callback):
+    def __init__(self, plc, config, unit, log_callback):
         '''
         :param plc: class Slave
         :param config: class ConfigLoader

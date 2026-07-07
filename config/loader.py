@@ -2,6 +2,7 @@
 import configparser
 from io import StringIO
 import os
+from utils.constants import UNITS, CONVERSION
 
 class ConfigLoader:
     def __init__(self):
@@ -17,7 +18,8 @@ class ConfigLoader:
             'num_setpoints':  '1', # (general section)
             'autotune_each': 'no', # (general section)
             'pressure': '1', # (setpoint section) Units set by the PLC
-            'max_err': '0.05'
+            'max_err': '0.05',
+            'unit': 'Torr' # **Units set by the PLC**
         }
         for key, val in default_values.items():
             self.config['DEFAULT'][key] = val
@@ -25,6 +27,7 @@ class ConfigLoader:
         # Initialize sections of the INI
         self.config.add_section('general') # Inherits values from DEFAULT
         self.config.add_section('setpoint.1') # inherits values from DEFAULT
+        #self.config.add_section('units') # Inherits unit value from DEFAULT
     
     # -----------------------------------------------------------------------------------------------------------------------------
 
@@ -75,8 +78,8 @@ class ConfigLoader:
 
     # --------------------------------------------------------------------------------------------------------------------------------
 
-    # Methods for retrieving values
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Methods for retrieving/setting values
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def get_setpoints(self):
         '''
@@ -152,6 +155,46 @@ class ConfigLoader:
         except ValueError:
             print(f'[WARNING] Invalid boolean for {key}, defaulting to {default}')
             return default
+
+    # ----------------------------------------------------------------------------------------------------------------------------------
+
+    # Setting active units
+    # ~~~~~~~~~~~~~~~~~~~~
+
+    def units(self, new_unit, old_unit=None):
+        '''
+        Sets the active units for the calibration sequence and alters all settings accordingly.
+
+        Units are treated differently than other settings because changing the units requires 
+        converting all setpoint pressures and tolerances to the new units. If the user wants to
+        change the units without converting the setpoints, they can do so by changing the unit 
+        in the config directly (e.g. `config.setg('unit', 'bar')`).
+
+        :param new_unit: str, the new unit to set (must be one of UNITS.values())
+        :param old_unit: str, the old unit to convert from (if None, will use the current unit in the config). This
+            option exists to allow for changing units at the same time as other settings and handling the conversion
+            after-the-fact. If the user is changing units without changing other settings, this can be left as None.
+        '''
+        if new_unit not in UNITS.values():
+            raise ValueError(f'Invalid unit: {new_unit}. Must be one of {list(UNITS.values())}')
+        
+        if old_unit is None:
+            old_unit = self.getg('unit', cast=str)
+
+        # Update the setpoints in the config to reflect the new units
+        for i, sp in enumerate(self.get_setpoints()):
+            sp_pressure, sp_max_err = sp
+            # Convert setpoint pressure to new units
+            new_pressure = sp_pressure * CONVERSION[new_unit] / CONVERSION[old_unit]
+            # Convert max error to new units
+            new_max_err = sp_max_err * CONVERSION[new_unit] / CONVERSION[old_unit]
+            # Update the setpoint in the config
+            self.set(f'setpoint.{i+1}', 'pressure', str(new_pressure))
+            self.set(f'setpoint.{i+1}', 'max_err', str(new_max_err))
+
+        # Update the unit in the units section
+        self.setg('unit', new_unit)
+
 
     # ----------------------------------------------------------------------------------------------------------------------------------
 

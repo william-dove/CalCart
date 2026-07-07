@@ -120,7 +120,6 @@ The GUI should be fairly straightforward; for a more detailed description see th
 
 ### Todo
 
-- Ability to change pressure units from SCADA
 - Print to PDF calibration report
 
 ### Startup procedure (PLC code)

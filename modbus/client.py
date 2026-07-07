@@ -1,6 +1,7 @@
 #modbus/client.py
 from pymodbus.client import ModbusTcpClient
 from utils.modbus_helpers import read_float, write_float
+from utils.constants import ADDRESSES, UNITS
 
 # Establishes communications with the PLC as modbus slave
 class Slave:
@@ -20,6 +21,8 @@ class Slave:
     def connect(self):
         if not self.master.connect():
             raise ConnectionError('PLC connection failed.')
+        # Stop users from changing units on the PLC once they can be changed from the GUI.
+        self.write_coil(ADDRESSES['change_units_enabled'], value=False) 
 
     def read_float(self, address):
         '''
@@ -60,13 +63,9 @@ class Slave:
          '''
          self.master.write_coil(address=address, value=value)
 
-    def get_units(self, ADDRESSES, UNITS):
+    def get_units(self):
         '''
         Reads the 16-bit Int (INT16) which represents the active unit.
-
-        :param ADDRESSES: dict
-        :param UNITS: dict
-        :return: active unit (string)
         '''
         resp = self.master.read_input_registers(address=ADDRESSES['pressure_units'])
         if resp.isError():
@@ -74,6 +73,20 @@ class Slave:
         else:
             idx = resp.registers[0]
             return UNITS[idx]
+        
+    def set_units(self, new_unit):
+        '''
+        Sets the active pressure units in UniLogic.
+
+        :param new_unit: str (must be one of the values in UNITS)
+        '''
+        if new_unit not in UNITS.values():
+            raise ValueError(f'Invalid unit: {new_unit}. Must be one of {list(UNITS.values())}')
+        
+        idx = next(key for key, value in UNITS.items() if value == new_unit)
+
+        self.master.write_register(address=ADDRESSES['pressure_units'], value=idx)
+
 
     def close(self):
         self.master.close()

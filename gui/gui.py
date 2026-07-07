@@ -5,6 +5,7 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 import threading
 from calibration.calibration import CalibrationSequence
+from utils.constants import ADDRESSES, UNITS
 import sys
 import os
 
@@ -20,7 +21,7 @@ class GUI(tk.Tk):
     :param addresses: Dictionary of modbus addresses for convenient reference.
     :param unit: Actively used pressure unit (FUTURE: make changeable from gui/cli)
     '''
-    def __init__(self, plc, config, ADDRESSES, unit):
+    def __init__(self, plc, config):
         '''
         - Initialize Tkinter root, reference attributes and local attributes
             ("reference" attributes don't have a leading underscore, and are assigned to input
@@ -53,8 +54,6 @@ class GUI(tk.Tk):
         # Initialize object references
         self.plc = plc # stateful reference to variable `plc` in main
         self.config = config # stateful reference to variable `config` in main
-        self.ad = ADDRESSES
-        self.unit = unit
         
         # Get the INI path as a StringVar
         if self.config.path is not None: # i.e. if the user loaded a config path on startup
@@ -81,7 +80,8 @@ class GUI(tk.Tk):
             'stop': self._cmd_shutdown,
             'cls': self._cmd_clear,
             'echo': self._cmd_echo,
-            'busy': self._cmd_make_busy
+            'busy': self._cmd_make_busy,
+            'bypass': self._cmd_bypass
         }
 
         # ---------------------------------------------------------------------------------------------
@@ -221,6 +221,18 @@ class GUI(tk.Tk):
         ttk.Label(self._genfrm, text='Autotune each setpoint? ').grid(column=0, row=6, sticky='e')
         ttk.Checkbutton(self._genfrm, variable=d['autotune_each'], offvalue='no', onvalue='yes').grid(column=1, row=6, sticky='w')
 
+        # Units
+        ttk.Label(self._genfrm, text='Pressure units: ').grid(column=0, row=7, sticky='e')
+        ttk.Combobox(
+            self._genfrm, 
+            textvariable=d['unit'], 
+            values=list(UNITS.values()), 
+            state='readonly'
+        ).grid(column=1, row=7, sticky='w')
+        ttk.Button(self._genfrm, text='Apply Units', command=self._set_unit).grid(
+            column=0, row=8, columnspan=2, padx=10, pady=(5, 0)
+        )
+
     def _set_spfrm(self):
         '''
         In the future, I will make the `self._spfrm` frame into a canvas, in order to add scrolling if too many 
@@ -235,12 +247,27 @@ class GUI(tk.Tk):
             spfrms[i+1].grid(column=0, row=i)
 
             # Setpoint pressure
-            ttk.Label(spfrms[i+1], text=f'Setpoint pressure [{self.unit}]: ').grid(column=0, row=0, sticky='e')
-            ttk.Entry(spfrms[i+1], textvariable=d[f'setpoint.{i+1}']['pressure']).grid(column=1, row=0, sticky='w')
+
+            ttk.Label(
+                spfrms[i+1], 
+                text = f'Setpoint pressure [{d['general']['unit'].get()}]: '
+            ).grid(column=0, row=0, sticky='e')
+
+            ttk.Entry(
+                spfrms[i+1], 
+                textvariable=d[f'setpoint.{i+1}']['pressure']
+            ).grid(column=1, row=0, sticky='w')
 
             # Setpoint error tolerance
-            ttk.Label(spfrms[i+1], text=f'Setpoint error tolerance [{self.unit}]: ').grid(column=0, row=1, sticky='e')
-            ttk.Entry(spfrms[i+1], textvariable=d[f'setpoint.{i+1}']['max_err']).grid(column=1, row=1, sticky='w')
+            ttk.Label(
+                spfrms[i+1], 
+                text = f'Setpoint error tolerance [{d['general']['unit'].get()}]: '
+            ).grid(column=0, row=1, sticky='e')
+
+            ttk.Entry(
+                spfrms[i+1], 
+                textvariable=d[f'setpoint.{i+1}']['max_err']
+            ).grid(column=1, row=1, sticky='w')
 
     def _clear_frame(self, frame):
         for child in frame.winfo_children():
@@ -250,6 +277,43 @@ class GUI(tk.Tk):
 
     # load/apply/retrieve/edit configuration settings
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def _set_unit(self):
+        '''
+        Updates the configuration to match the user-inputted unit.
+        If the user clicks "Apply Units" in the GUI, this function is called. 
+        It updates the config to match the new unit, and also converts all 
+        setpoint pressures and tolerances to the new units.
+
+        If the user instead clicks "Apply Changes" at the top, the unit will be changed,
+        but all values are assumed to be in the new units, and no conversion is done. 
+        This is because the user may have manually changed the setpoint values to match 
+        the new units, and we don't want to convert them again.
+        '''
+        # Stow the old unit before applying all changes (this way it's remembered for the conversion after).
+        old_unit = self.config.getg('unit', cast=str)
+
+        # Stow the new unit (which will be applied to the config after this)
+        new_unit = self._widget_dict['general']['unit'].get()
+
+        # Apply any other changes the user has made since last applying changes. 
+        # This is done so that the unit change is applied to the most recent values 
+        # of the setpoints, not the last saved values.
+        self._set_config_dict()
+
+        # Convert the newly applied values according to the new unit.
+        # Nothing's stopping the .units method from working if the current
+        # unit in the config is the same as the new unit (it still works to convert
+        # the pressure values)
+        self.config.units(new_unit, old_unit=old_unit)
+
+        # Retrieve the newly converted values and update the GUI to match.
+        self._get_config_dict() # Refresh the widget dictionary to match the new config.
+        self._set_genfrm() # Refresh the general settings frame to match the new config.
+        self._set_spfrm() # Refresh the setpoint settings frame to match the new config.
+
+        # Set the units on the PLC.
+        self.plc.set_units(new_unit)
 
     def _get_config_dict(self):
         '''
@@ -282,6 +346,8 @@ class GUI(tk.Tk):
 
         * When the user increases the number of setpoints and applies the change, the additional sections in
             the INI are created with the same values as `[setpoint.1]`.
+
+        :param skip: (tuple) list of sections to skip when applying changes. Mainly used to skip the 'units' setting.
         '''
         widget_dict = self._widget_dict
         config_dict = {}
@@ -307,6 +373,9 @@ class GUI(tk.Tk):
         # Refresh the settings windows
         self._set_genfrm()
         self._set_spfrm()
+
+        # Set the units on the PLC.
+        self.plc.set_units(self.config.getg('unit', cast=str))
 
     def _load_config(self):
         '''
@@ -334,6 +403,10 @@ class GUI(tk.Tk):
             # Refresh the settings windows
             self._set_genfrm()
             self._set_spfrm()
+
+            # Set the units on the PLC
+            self.plc.set_units(self.config.getg('unit', cast=str))
+            
         else: # Don't do anything if the user picks a bad path
             return
 
@@ -386,8 +459,7 @@ class GUI(tk.Tk):
                 cal_seq = CalibrationSequence(
                     self.plc,
                     self.config,
-                    self.ad,
-                    self.unit,
+                    self._widget_dict['general']['unit'].get(),
                     self._log_from_thread
                 )
 
@@ -506,11 +578,17 @@ class GUI(tk.Tk):
         Shows active pressure units.
         Reads pressure sensor input registers.
         '''
-        self._log(f'System using pressure units: {self.unit}')
+        self._log(f'System using pressure units: {self.widget_dict["general"]["unit"].get()}')
         transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
         for t in transducers:
-            value = self.plc.read_float(self.ad[t])
-            self._log(f'{t}: {value:.2f} {self.unit}')
+            value = self.plc.read_float(ADDRESSES[t])
+            self._log(f'{t}: {value:.2f} {self.widget_dict["general"]["unit"].get()}')
+
+    def _cmd_bypass(self, args=None):
+        '''
+        Bypasses the startup sequence in UniLogic.
+        '''
+        self.plc.write_coil(ADDRESSES['bypass_startup'], value=True)
 
     def _cmd_help(self, args=None):
         '''
@@ -534,6 +612,9 @@ class GUI(tk.Tk):
             self.is_busy = False
         else:
             self.is_busy = True
+
+
+
 
     # -------------------------------------------------------------------------------------------------------------------------
 
