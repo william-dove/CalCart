@@ -39,6 +39,7 @@ This documentation will focus on the SCADA Python application providing higher l
 
 ```
 CalCart
++---CalCart.ulpr
 +---main.py
 +---calibration
 ¦   +---calibration.py
@@ -57,7 +58,9 @@ CalCart
     +---modbus_helpers.py
 ```
 
-Different functions of the application are assigned to Python Classes within designated scripts/subdirectories.
+Lower-level control/PLC code is implemented in the UniLogic project file `CalCart.ulpr`. It's just held here to keep the whole project in one place.
+
+The rest of the directory is for the python project, controlled by `main.py`. Different functions of the application are assigned to Python Classes within designated subdirectories/scripts.
 
 The following classes are used by `main.py` when the application is started:
 
@@ -117,10 +120,8 @@ The GUI should be fairly straightforward; for a more detailed description see th
 
 ### Todo
 
-- Safer blocking between main thread (GUI), IO thread (CLI) and temp worker threads (CalibrationSequence)
 - Ability to change pressure units from SCADA
 - Print to PDF calibration report
-- More status updates in GUI
 
 ### Startup procedure (PLC code)
 
@@ -131,11 +132,6 @@ The GUI should be fairly straightforward; for a more detailed description see th
 - Once the time is up, prompt the user to zero the three transducers. Once zeroed, exit the startup mode.
 Important things to have:
 - Use the system time for the 4 hr timer, this way if the system gets shut off it doesn't automatically reset. Actually, probably the best way to implement this is by adding a check on startup--if the system was running less than 15 minutes ago, don't run startup, or at least make it an option to skip.
-
-### Moving CLI into GUI
-
-- Removing direct command line access to centralize the program in the tkinter thread.
-- Create embedded terminal window in the gui
 
 ### Generate reports based on excel template
 
