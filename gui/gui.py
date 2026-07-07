@@ -6,6 +6,7 @@ from tkinter.scrolledtext import ScrolledText
 import threading
 from calibration.calibration import CalibrationSequence
 import sys
+import os
 
 
 class GUI(tk.Tk):
@@ -74,8 +75,8 @@ class GUI(tk.Tk):
         self._statusvar = tk.StringVar(value='Status: waiting for action...')
 
         # Initialize command dicitonary
-        commands = {
-            'help': lambda: self._log(commands.keys()),
+        self._commands = {
+            'help': lambda: self._log(self._commands.keys()),
             'status': self._status,
             'stop': self._shutdown,
             'cls': self._clear
@@ -365,101 +366,136 @@ class GUI(tk.Tk):
                 filetypes = [("comma-separated value file", "*.csv"), ("Excel file", "*.xlsx")]
             )
             self._resultspath.set(save_path)
-
-    # DEPRECATED: see the newer version with safe threading below.
-    # def _cal(self):
-    #     '''
-    #     For now I will assume the save path is valid; eventually I will add a popup warning if it is not.
-    #     '''
-    #     self.is_busy = True
-    #     self._progressbar.start()
-    #     print('\n') # Temporary fix for messages popping up during the cli input loop (see CLI messaging below)
-    #     cal_seq = CalibrationSequence(self.plc, self.config, self.ad, self.unit)
-    #     results = cal_seq.run()
-    #     # Save results
-    #     save_path = self._resultspath.get()
-    #     if save_path.endswith(".csv"):
-    #         results.to_csv(save_path)
-    #     elif save_path.endswith(".xlsx"):
-    #         results.to_excel(save_path)
-    #     else:
-    #         self.is_busy = False
-    #         raise ValueError('Incorrect file type; aborting save.')
-    #     self.is_busy = False
-    #     self._progressbar.stop()
-
     
     def _cal(self):
         '''
-        This method runs in the main thread and initiates the _run_calibratoin method, which runs
-        in a worker thread.
+        Opens up a worker thread which performs a calibration sequence.
+        When the calibration sequence is finished, activates callback function.
 
         *For now I will assume the save path is valid; eventually I will add a popup warning if it is not.
         '''
+        def callback():
+            self.is_busy = False
+            self._progressbar.stop()
+            self._log(f'[STATUS] Calibration data saved to {self._resultspath.get()}')
+
+        def worker():
+            try:
+                cal_seq = CalibrationSequence(
+                    self.plc,
+                    self.config,
+                    self.ad,
+                    self.unit,
+                    self._log_from_thread
+                )
+
+                results = cal_seq.run()
+
+                save_path = self._resultspath.get()
+
+                if save_path.endswith(".csv"):
+                    results.to_csv(save_path, index=False)
+                elif save_path.endswith(".xlsx"):
+                    results.to_excel(save_path, index=False)
+
+            except Exception as e:
+                self._log_from_thread(f"[ERROR] {e}")
+
+            finally: 
+                # When the worker is finished (i.e. calibration sequence complete), the
+                # built-in `.after` method of the Tk class will call this function in the
+                # main thread immediately/as soon as the main thread is available ("after
+                # 0 seconds")
+                self.after(0, callback)
+
+        # Only proceed if the calibration isn't already in progress.
         if self.is_busy:
-            self._message('[STATUS] Calibration already in progress.')
+            self._log('[STATUS] Calibration already in progress.')
             return
-        print('[gui]') # Temporary fix for messages popping up during the cli input loop (see CLI messaging below)
+        
+        # Only proceed if the user selected a valid save path.
+        save_path = self._resultspath.get()
+        save_dir, save_filename = os.path.split(save_path)
+        if not save_path:
+            self._log('[WARNING] No save path selected.')
+            return
+        if not save_filename.endswith(('.csv', '.xlsx')):
+            self._log('[WARNING] Invalid save file format. Please select a .csv or .xlsx file.')
+            return
+        if not os.path.isdir(save_dir):
+            self._log('[WARNING] Invalid save directory.')
+            return
+
+        # Start the calibration
         self.is_busy = True
         self._progressbar.start()
-
         threading.Thread(
-            target=self._run_calibration,
+            target=worker,
             daemon=True
         ).start()
 
-    def _run_calibration(self):
-        '''
-        Runs the calibration sequence in a new thread.
-        When complete, activates callback function `._cal_finished`.
-        '''
-        try:
-            cal_seq = CalibrationSequence(
-                self.plc,
-                self.config,
-                self.ad,
-                self.unit
-            )
-
-            results = cal_seq.run()
-
-            save_path = self._resultspath.get()
-
-            if save_path.endswith(".csv"):
-                results.to_csv(save_path, index=False)
-            elif save_path.endswith(".xlsx"):
-                results.to_excel(save_path, index=False)
-
-        except Exception as e:
-            print(f"[ERROR] {e}")
-
-        finally: 
-            # When the worker is finished (i.e. calibration sequence complete), the
-            # built-in `.after` method of the Tk class will call this funciton as soon
-            # as the calibratoin is finished.
-            self.after(0, self._cal_finished)
-        
-    def _cal_finished(self):
-        self.is_busy = False
-        self._progressbar.stop()
-        print(f'[STATUS] Calibration data saved to {self._resultspath.get()}')
-        print('(CalCart.py)>', end='') # Same fix as earlier--exit "Calibration mode" for terminal
-
     # -------------------------------------------------------------------------------------------------------------------------
 
-    # CLI messaging
-    # ~~~~~~~~~~~~~
+    # Embedded cli commands
+    # ~~~~~~~~~~~~~~~~~~~~~
+    
+    def _log(self, msg):
+        '''
+        Sends a message to the console window.
+        '''
+        self._console.config(state='normal')
+        self._console.insert(tk.END, msg+'\n')
+        self._console.see(tk.END)
+        self._console.config(state='disabled')
 
-    # Right now, the whole cli/gui interaction is a little sketchy, but interaction on the gui
-    # somehow works even though the main thread is blocked at the user input for the CLI and 
-    # tk.Tk().mainloop() is never called explicitly... For now I'll just roll with it and add
-    # a band aid by making cli messages sent from the gui (e.g. status updates that happen when 
-    # a user interacts with the gui, while the input loop is happening) start on a newline and 
-    # regenerate the command prompt.
+    def _log_from_thread(self, msg):
+        '''
+        Safely logs messages from worker threads by scheduling them on the Tk main thread.
+        '''
+        self.after(0, lambda: self._log(msg))
 
-    def _message(self, msg):
-        #print('[gui]\n' + msg + '\n(CalCart.py)>')
-        print('[gui]\n' + msg + '\n(CalCart.py)>', end='')
+    def _execute(self, event=None):
+        command = self._entry.get()
+        self._entry.delete(0, tk.END)
+
+        self._log(f'>{command}')
+
+        cmd_func = self._commands.get(command)
+        if cmd_func:
+            cmd_func()
+        else:
+            self._log('[WARNING] Unknown command.')
+
+    def _shutdown(self):
+        '''
+        Safely closes the program. Activated either by the red X in the GUI
+        or the `stop` command in the CLI.
+
+        * I'm not sure how the `stop` command will function now that CLI commands are 
+        being executed on a separate thread. Maybe it will still work?
+        '''
+        self.plc.close()
+        self.quit()
+        self.destroy()
+        sys.exit()
+    
+    def _clear(self):
+        '''
+        Clears the console window.
+        '''
+        self._console.config(state='normal')
+        self._console.delete('1.0', tk.END)
+        self._console.config(state='disabled')
+
+    def _status(self):
+        '''
+        Reads pressure sensor input registers.
+        '''
+        transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
+        for t in transducers:
+            value = self.plc.read_float(self.ad[t])
+            self._log(f'{t}: {value:.2f} {self.unit}')
+
     # -------------------------------------------------------------------------------------------------------------------------
 
     # (DEPRECATED) configuration settings methods
@@ -506,40 +542,3 @@ class GUI(tk.Tk):
             dconfig_Strings[config_key] = config_val.get() # Convert from tk.StringVars to normal Strings
         self.config.setddict(dconfig_Strings)
 
-    def _log(self, msg):
-        '''
-        Sends a message to the console window.
-        '''
-        self._console.config(state='normal')
-        self._console.insert(tk.END, msg+'\n')
-        self._console.see(tk.END)
-        self._console.config(state='disabled')
-
-    def _execute(self, event=None):
-        command = self._entry.get()
-        self._entry.delete(0, tk.END)
-
-        self._log(f'>{command}')
-
-        return # Add executor here.
-
-    def _shutdown(self):
-        '''
-        Safely closes the program. Activated either by the red X in the GUI
-        or the `stop` command in the CLI.
-
-        * I'm not sure how the `stop` command will function now that CLI commands are 
-        being executed on a separate thread. Maybe it will still work?
-        '''
-        self.plc.close()
-        self.quit()
-        self.destroy()
-        sys.exit()
-    
-    def _clear(self):
-        '''
-        Clears the console window.
-        '''
-        self._console.config(state='normal')
-        self._console.delete('1.0', tk.END)
-        self._console.config(state='disabled')

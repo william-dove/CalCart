@@ -8,8 +8,6 @@ from utils.constants import ADDRESSES, UNITS
 # Other
 import tkinter as tk
 import sys
-import subprocess
-import threading
 
 # -----------------------------------------------------------------------
 
@@ -19,24 +17,22 @@ plc.connect()
 
 # Read current pressure units
 unit = plc.get_units(ADDRESSES, UNITS)
-print(f'System using pressure units: {unit}')
+#print(f'System using pressure units: {unit}')
 
 # Load test configuration
 config = ConfigLoader()
-if len(sys.argv) == 2:
-    config.load(sys.argv[1])
-    print(f'[STATUS] Opened configuration file {sys.argv[1]}')
+# if len(sys.argv) == 2:
+#     config.load(sys.argv[1])
+#     print(f'[STATUS] Opened configuration file {sys.argv[1]}')
 
 # Initialize tkinter window references Class variables `plc` and `config` (initialized above)
 root = GUI(plc, config, ADDRESSES, unit)
-# Initialize command line interface - references Class variables `plc` and `config` (initialized above)
-cli = CLI(plc, config, ADDRESSES, unit)
+# # Initialize command line interface - references Class variables `plc` and `config` (initialized above)
+# cli = CLI(plc, config, ADDRESSES, unit)
 
 root._log(f'System using pressure units: {unit}')
-if len(sys.argv) == 2:
-    root._log(f'[STATUS] Opened configuration file {sys.argv[1]}')
 
-# # Define shutdown protocol !! This is done in GUI now
+# # Define shutdown protocol # !! This is done in GUI now
 # def shutdown():
 #     '''
 #     Safely closes the program. Activated either by the red X in the GUI

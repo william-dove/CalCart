@@ -6,17 +6,22 @@ from tkinter import filedialog
 # Defines the calibration sequence.
 
 class CalibrationSequence:
-    def __init__(self, plc, config, ADDRESSES, unit):
+    def __init__(self, plc, config, ADDRESSES, unit, log_callback):
         '''
         :param plc: class Slave
         :param config: class ConfigLoader
         :param addresses: dict of Modbus addresses assigned by PLC
         :param units: str (pressure unit)
+        :param log_callback: callable used to emit status messages in the Tk main thread.
         '''
         self.plc = plc # class Slave (defined in `client.py`)
         self.config = config
         self.ad = ADDRESSES # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
         self.unit = unit
+        self.log = log_callback
+
+        self.newmsg = False
+        self.msg = None
 
     def run(self):
         '''
@@ -24,7 +29,7 @@ class CalibrationSequence:
 
         :return: dataframe containing results of calibration sequence.
         '''
-        print('[STATUS] Starting calibration...')
+        self.log('[STATUS] Starting calibration...')
         setpoints = self.config.get_setpoints() # list of tuples of form (<setpoint pressure>, <setpoint error tolerance>)
         times, cal, uut = [], [], [] # Initialize lists for storing results
 
@@ -38,13 +43,13 @@ class CalibrationSequence:
             settled = self._set_pressure(sp, max_err)
             if settled:
                 times, cal, uut = self._record_data(times, cal, uut)
-                print(f'[STATUS] Finished recording for setpoint ({sp} {self.unit}).')
+                self.log(f'[STATUS] Finished recording for setpoint ({sp} {self.unit}).')
             else:
-                print(f'[STATUS] Skipping setpoint ({sp} {self.unit})')
+                self.log(f'[STATUS] Skipping setpoint ({sp} {self.unit})')
                 continue
         
         # Save results
-        print('[STATUS] Calibration sequence complete!')
+        self.log('[STATUS] Calibration sequence complete!')
         return pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
         
     # ----------------------------------------------------------------------------------------------------------------------------
@@ -56,7 +61,7 @@ class CalibrationSequence:
 
         :param sp: the setpoint pressure.
         '''
-        print(f'[STATUS] Submitting setpoint ({sp} {self.unit})...')
+        self.log(f'[STATUS] Submitting setpoint ({sp} {self.unit})...')
         self.plc.write_float(self.ad['Setpoint pressure'], sp)
         self.plc.write_coil(self.ad['submit_setpoint'], value=True)
         time.sleep(1.0) # Wait for the submit_setpoint bit to adjust <--yay this fixed it!
@@ -65,10 +70,10 @@ class CalibrationSequence:
     def _check_autotune(self):
         autotune_complete = self.plc.read_coil(self.ad['PID Configuration.Autotune Done'])
         if autotune_complete:
-            print(f'[STATUS] Autotune already completed for this calibration sequence.')
+            self.log(f'[STATUS] Autotune already completed for this calibration sequence.')
             return
         else:
-            print('[STATUS] No autotune parameters found.')
+            self.log('[STATUS] No autotune parameters found.')
             self._autotune()
 
     def _autotune(self):
@@ -79,7 +84,7 @@ class CalibrationSequence:
 
         :return: False for failure and True for success
         '''
-        print('[STATUS] Autotuning...')
+        self.log('[STATUS] Autotuning...')
         self.plc.write_coil(self.ad['run_PID'], value=False) # (experimental) this may not do anything but it couldn't hurt and might be good
         self.plc.write_coil(self.ad['run_autotune'], value=True)
         
@@ -93,13 +98,13 @@ class CalibrationSequence:
                 raise RuntimeError('Autotune timeout')
             autotune_complete = self.plc.read_coil(self.ad['PID Configuration.Autotune Done'])
             time.sleep(1.0)
-        print('[STATUS] Autotune complete.')
+        self.log('[STATUS] Autotune complete.')
 
     def _set_pressure(self, sp, max_err):
         '''
         :return: True for successful settling, False for timeout.
         '''
-        print(f'[STATUS] Attempting to reach setpoint ({sp} {self.unit})...')
+        self.log(f'[STATUS] Attempting to reach setpoint ({sp} {self.unit})...')
         self.plc.write_coil(self.ad['run_PID'], value=True)
 
         # Establish a max time in case setpoint is unreachable
@@ -113,7 +118,7 @@ class CalibrationSequence:
         while True:
             # Check for timeout
             if time.time() > timeout:
-                print(f'[WARNING] Setpoint is unreachable after {setpoint_timeout}s')
+                self.log(f'[WARNING] Setpoint is unreachable after {setpoint_timeout}s')
                 return False
 
             # Read MKS 1 for PID process variable.
@@ -128,7 +133,7 @@ class CalibrationSequence:
                 elapsed = time.time() - settle_start
 
                 if elapsed >= setpoint_settle:
-                    print(f'[STATUS] Settled. Collecting data for setpoint ({sp} {self.unit})...')
+                    self.log(f'[STATUS] Settled. Collecting data for setpoint ({sp} {self.unit})...')
                     return True
             else:
                 # reset timer if tolerance band is exceeded.
