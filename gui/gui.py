@@ -81,94 +81,65 @@ class GUI(tk.Tk):
             'cls': self._cmd_clear,
             'echo': self._cmd_echo,
             'busy': self._cmd_make_busy,
-            'bypass': self._cmd_bypass
+            'bypass': self._cmd_bypass,
+            'connect': self._cmd_connect
         }
-
-        # ---------------------------------------------------------------------------------------------
 
         # Set up basic window and layout
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        # --Main/Parent Frame--
-        frm = ttk.Frame(self, padding='10')
-        frm.pack(fill='both', expand=True)
-        frm.columnconfigure(0, weight=0)  # left side stays fixed
-        frm.columnconfigure(1, weight=1)  # right side expands
-        frm.rowconfigure(1, weight=1)
+            # Main/Parent Frame
+            # ~~~~~~~~~~~~~~~~~
+        pfrm = ttk.Frame(self, padding='10')
+        pfrm.pack(fill='both', expand=True)
+        pfrm.columnconfigure(0, weight=0)  # left side stays fixed
+        pfrm.columnconfigure(1, weight=1)  # right side expands
+        pfrm.rowconfigure(1, weight=1)
 
-
-        # --Subframes--
-            # Only the subframes which are *dynamic*, i.e. edited or
-            # refreshed after the gui is initialized in main, are stored 
-            # as local attributes. The other ones are just local variables
-            # inside of the __init__ function.
-        # File subframe (Top left/middle)
-        filefrm = ttk.LabelFrame(frm, text='File', padding='10')
+            # Subframes
+            # ~~~~~~~~~
+            
+        # --File--
+        # (Top left/middle)
+        filefrm = ttk.LabelFrame(pfrm, text='File', padding='10')
         filefrm.grid(column=0, row=0, columnspan=2, sticky="ew")
         filefrm.columnconfigure(1, weight=1)
         filefrm.grid_propagate(False)
         filefrm.configure(width=800, height=120)
+        self._set_filefrm(filefrm)
 
-        # General [DEFAULT] settings subframe (Bottom left)
-        self._genfrm = ttk.LabelFrame(frm, text="Calibration Sequence Options", padding='10')
-        self._genfrm.grid(column=0, row=1, sticky="nsew")
-        self._genfrm.columnconfigure(1, weight=1)
-        self._genfrm.grid_propagate(False)
-        self._genfrm.configure(width=400, height=300)
+        # --General Settings--
+        # (Bottom left)
+        self._stngfrm = ttk.LabelFrame(pfrm, text="Calibration Sequence Options", padding='10')
+        self._stngfrm.grid(column=0, row=1, sticky="nsew")
+        self._stngfrm.columnconfigure(1, weight=1)
+        self._stngfrm.grid_propagate(False)
+        self._stngfrm.configure(width=400, height=300)
+        self._set_stngfrm(self._stngfrm)
 
-        # Setpoint settings subframe (Bottom right)
-        self._spfrm = ttk.LabelFrame(frm, text="Setpoints", padding='10')
+        # --Setpoint Settings--
+        # (Bottom right)
+        self._spfrm = ttk.LabelFrame(pfrm, text="Setpoints", padding='10')
         self._spfrm.grid(column=1, row=1, sticky='nsew')
         self._spfrm.columnconfigure(1, weight=1)
         self._spfrm.grid_propagate(False)
         self._spfrm.configure(width=400, height=300)
-
-        # Calibration subframe (Far top right)
-        calfrm = ttk.Frame(frm, padding='10')
-        calfrm.grid(column=2, row=0, sticky='nsew')
-
-        # Console (Far bottom right)
-        confrm = ttk.LabelFrame(frm, text='Console', padding='10')
-        confrm.grid(column=2, row=1, sticky='ns')
-        # ------------------------------------------------------------------------
-
-        # Add GUI elements
-        # ~~~~~~~~~~~~~~~~
-
-        # --File--
-        self._set_filefrm(filefrm)
-
-        # --Settings--
-        self._set_genfrm()
-
-        # --Setpoint Settings--
-        self._set_spfrm()
+        self._set_spfrm(self._spfrm)
 
         # --Calibration Run Frame--
-        ttk.Button(
-            calfrm, text='Run\nCalibration\nSequence', command=self._cal
-        ).grid(column=0, row=0, rowspan=2, padx=10, sticky='ns')
-
-        ttk.Label(calfrm, textvariable=self._statusvar).grid(column=1, row=0)
-        self._progressbar = ttk.Progressbar(calfrm, orient='horizontal', mode='indeterminate', length=350)
-        self._progressbar.grid(column=1, row=1, pady=5, padx=10)
+        # (Far top right)
+        runfrm = ttk.Frame(pfrm, padding='10')
+        runfrm.grid(column=2, row=0, sticky='nsew')
+        self._set_runfrm(runfrm)
 
         # --Console Frame--
-        self._console = ScrolledText(confrm, font=('Consolas', 11), height=12)
-        self._console.pack(fill='both', expand=True)
-        self._console.insert(tk.END, 'Application started.\n')
-        self._console.config(state='disabled') # Stop the user from writing in the console window.
-
-        entrybox = tk.Frame(confrm)
-        entrybox.pack(fill='x')
-
-        tk.Label(entrybox, text='>', font=('Consolas', 11)).pack(side='left', padx=(5,2))
-        self._entry = tk.Entry(entrybox, font=('Consolas', 11))
-        self._entry.pack(side='left', fill='x', expand=True, padx=(0,5))
-        self._entry.bind("<Return>", self._execute)
-
-
+        # (Far bottom right)
+        confrm = ttk.LabelFrame(pfrm, text='Console', padding='10')
+        confrm.grid(column=2, row=1, sticky='ns')
+        self._set_confrm(confrm)
+     
     # -----------------------------------------------------------------------------------------------------
+
 
     # Create/refresh subframes
     # ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -189,61 +160,128 @@ class GUI(tk.Tk):
         ttk.Button(filefrm, text='Apply Changes', command=self._set_config_dict).grid(column=0, row=2, sticky='w')
         ttk.Button(filefrm, text='Save Configuration', command=self._save_config).grid(column=1, row=2, sticky='w')
 
-    def _set_genfrm(self):
+    def _set_stngfrm(self, frm):
         '''
-        Sets up all the widgets within the general [DEFAULT] settings section.
-        Binds the general settings StringVars to the widgets. This must be redone if
-        the general settings dictionary is recreated.
+        Sets up all the widgets for user settings in the [general], [customer], [device_info], 
+        and [standard_info] sections of the config. Binds the StringVars to the widgets.This 
+        must be redone if the config dictionary is recreated.
         '''
-        self._clear_frame(self._genfrm)
+        self._clear_frame(frm)
+
+        # --General--
+
         d = self._widget_dict['general']
+
+        # Section title
+        ttk.Label(
+            frm, text='General Settings', font=('TkDefaultFont', 10, 'bold')
+        ).pack(fill='x', pady=(0, 5))
+
         # Setpoint wait
-        ttk.Label(self._genfrm, text='Setpoint wait time [s]: ').grid(column=0, row=1, sticky='e')
-        ttk.Entry(self._genfrm, textvariable=d['setpoint_wait']).grid(column=1, row=1, sticky='w')
+        self._setting(frm, 'Setpoint wait time [s]: ', 'general', 'setpoint_wait')
 
         # Sample rate
-        ttk.Label(self._genfrm, text='Sample rate [Hz]: ').grid(column=0, row=2, sticky='e')
-        ttk.Entry(self._genfrm, textvariable=d['sample_rate']).grid(column=1, row=2, sticky='w')
+        self._setting(frm, 'Sample rate [Hz]: ', 'general', 'sample_rate')
 
         # Setpoint settle
-        ttk.Label(self._genfrm, text='Setpoint settling time [s]: ').grid(column=0, row=3, sticky='e')
-        ttk.Entry(self._genfrm, textvariable=d['setpoint_settle']).grid(column=1, row=3, sticky='w')
+        self._setting(frm, 'Setpoint settling time [s]: ', 'general', 'setpoint_settle')
 
         # Setpoint timeout
-        ttk.Label(self._genfrm, text='Setpoint timeout [s]: ').grid(column=0, row=4, sticky='e')
-        ttk.Entry(self._genfrm, textvariable=d['setpoint_timeout']).grid(column=1, row=4, sticky='w')
+        self._setting(frm, 'Setpoint timeout [s]: ', 'general', 'setpoint_timeout')
 
         # Number of setpoints
-        ttk.Label(self._genfrm, text='Number of setpoints: ').grid(column=0, row=5, sticky='e')
-        ttk.Entry(self._genfrm, textvariable=d['num_setpoints']).grid(column=1, row=5, sticky='w')
+        self._setting(frm, 'Number of setpoints: ', 'general', 'num_setpoints')
 
         # Autotune each setpoint
-        ttk.Label(self._genfrm, text='Autotune each setpoint? ').grid(column=0, row=6, sticky='e')
-        ttk.Checkbutton(self._genfrm, variable=d['autotune_each'], offvalue='no', onvalue='yes').grid(column=1, row=6, sticky='w')
+        row = ttk.Frame(frm)
+        row.pack(fill='x', pady=2)
+        ttk.Label(
+            row, text='Autotune each setpoint? ', width=24, anchor='e'
+        ).pack(side='left')
+        ttk.Checkbutton(
+            row, variable=d['autotune_each'], offvalue='no', onvalue='yes'
+        ).pack(side='left', fill='x', expand=True)
 
         # Units
-        ttk.Label(self._genfrm, text='Pressure units: ').grid(column=0, row=7, sticky='e')
+        row = ttk.Frame(frm)
+        row.pack(fill='x', pady=2)
+        ttk.Label(
+            row, text='Pressure units: ', width=24, anchor='e'
+        ).pack(side='left')
         ttk.Combobox(
-            self._genfrm, 
+            row, 
             textvariable=d['unit'], 
             values=list(UNITS.values()), 
             state='readonly'
-        ).grid(column=1, row=7, sticky='w')
-        ttk.Button(self._genfrm, text='Apply Units', command=self._set_unit).grid(
-            column=0, row=8, columnspan=2, padx=10, pady=(5, 0)
-        )
+        ).pack(side='left', fill='x', expand=True)
 
-    def _set_spfrm(self):
+        btnrow = ttk.Frame(frm)
+        btnrow.pack(fill='x', pady=2)
+        ttk.Button(
+            btnrow, text='Apply Units', command=self._set_unit
+        ).pack(fill='x', pady=(5, 0))
+
+        # --Customer--
+
+        d = self._widget_dict['customer']
+
+        # Section title
+        ttk.Label(
+            frm, text='Customer Information', font=('TkDefaultFont', 10, 'bold')
+        ).pack(fill='x', pady=(0, 5))
+
+        # Company name
+        self._setting(frm, 'Company Name: ', 'customer', 'company')
+
+        # Project name
+        self._setting(frm, 'Project Name: ', 'customer', 'project')
+
+        # Service number
+        self._setting(frm, 'Service Number: ', 'customer', 'service_number')
+
+        # Machine name
+        self._setting(frm, 'Machine Name: ', 'customer', 'machine')
+
+        # Location
+        self._setting(frm, 'Location: ', 'customer', 'location')
+
+        # Date
+        self._setting(frm, 'Date: ', 'customer', 'date')
+
+        # Calibration type
+        self._setting(frm, 'Calibration Type: ', 'customer', 'calibration_type')
+
+        # Procedure
+        self._setting(frm, 'Procedure: ', 'customer', 'procedure')
+
+        # Calibration
+        self._setting(frm, 'Calibration: ', 'customer', 'calibration')
+
+    def _setting(self, frm, setting_name, ini_section, ini_key):
+        '''
+        To be used in the above method. Creates and packs a new setting to the table.
+        Only used for generic string entry type settings. The rest you gotta do yourself.
+        '''
+        row = ttk.Frame(frm)
+        row.pack(fill='x', pady=2)
+        ttk.Label(
+            row, text=setting_name, width=24, anchor='e'
+        ).pack(side='left')
+        ttk.Entry(
+            row, textvariable=self._widget_dict[ini_section][ini_key]
+        ).pack(side='left', fill='x', expand=True)
+
+    def _set_spfrm(self, frm):
         '''
         In the future, I will make the `self._spfrm` frame into a canvas, in order to add scrolling if too many 
         setpoints are added to display at once on the screen.
         '''
-        self._clear_frame(self._spfrm)
+        self._clear_frame(frm)
         d = self._widget_dict
         num_setpoints = self.config.getg('num_setpoints', cast=int)
         spfrms = {}
         for i in range(num_setpoints):
-            spfrms[i+1] = ttk.LabelFrame(self._spfrm, text=f'Setpoint {i+1}')
+            spfrms[i+1] = ttk.LabelFrame(frm, text=f'Setpoint {i+1}')
             spfrms[i+1].grid(column=0, row=i)
 
             # Setpoint pressure
@@ -269,11 +307,44 @@ class GUI(tk.Tk):
                 textvariable=d[f'setpoint.{i+1}']['max_err']
             ).grid(column=1, row=1, sticky='w')
 
-    def _clear_frame(self, frame):
-        for child in frame.winfo_children():
+    def _set_runfrm(self, frm):
+        '''
+        Instantiates the _progressbar local attribute which can be 
+        started/stopped to indicate that a calibration sequence is in progress. 
+        '''
+        ttk.Button(
+            frm, text='Run\nCalibration\nSequence', command=self._cal
+        ).grid(column=0, row=0, rowspan=2, padx=10, sticky='ns')
+
+        ttk.Label(frm, textvariable=self._statusvar).grid(column=1, row=0)
+        self._progressbar = ttk.Progressbar(frm, orient='horizontal', mode='indeterminate', length=350)
+        self._progressbar.grid(column=1, row=1, pady=5, padx=10)
+
+    def _set_confrm(self, frm):
+        '''
+        Instantiates the local attributes _console and _entry to be 
+        used when handling/displaying command entries.
+        '''
+        self._console = ScrolledText(frm, font=('Consolas', 11), height=12)
+        self._console.pack(fill='both', expand=True)
+        self._console.insert(tk.END, 'Application started.\n')
+        self._console.config(state='disabled') # Stop the user from writing in the console window.
+
+        entrybox = tk.Frame(frm)
+        entrybox.pack(fill='x')
+
+        tk.Label(entrybox, text='>', font=('Consolas', 11)).pack(side='left', padx=(5,2))
+        self._entry = tk.Entry(entrybox, font=('Consolas', 11))
+        self._entry.pack(side='left', fill='x', expand=True, padx=(0,5))
+        self._entry.bind("<Return>", self._execute)
+
+
+    def _clear_frame(self, frm):
+        for child in frm.winfo_children():
             child.destroy()
 
     # --------------------------------------------------------------------------------------------------------------------------------
+
 
     # load/apply/retrieve/edit configuration settings
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -309,8 +380,8 @@ class GUI(tk.Tk):
 
         # Retrieve the newly converted values and update the GUI to match.
         self._get_config_dict() # Refresh the widget dictionary to match the new config.
-        self._set_genfrm() # Refresh the general settings frame to match the new config.
-        self._set_spfrm() # Refresh the setpoint settings frame to match the new config.
+        self._set_stngfrm(self._stngfrm) # Refresh the general settings frame to match the new config.
+        self._set_spfrm(self._spfrm) # Refresh the setpoint settings frame to match the new config.
 
         # Set the units on the PLC.
         self.plc.set_units(new_unit)
@@ -371,8 +442,8 @@ class GUI(tk.Tk):
         # Reset the widget dictionary using these new values
         self._get_config_dict()
         # Refresh the settings windows
-        self._set_genfrm()
-        self._set_spfrm()
+        self._set_stngfrm(self._stngfrm)
+        self._set_spfrm(self._spfrm)
 
         # Set the units on the PLC.
         self.plc.set_units(self.config.getg('unit', cast=str))
@@ -396,13 +467,13 @@ class GUI(tk.Tk):
         )
         if load_path.endswith('.ini'):
             self.config.load(load_path) # Error handling done here
-            self._message(f'[STATUS] Opened configuration file {load_path}')
+            self.log(f'[STATUS] Opened configuration file {load_path}')
             self._configpath.set(load_path)
             # reset the settings dictionaries using the new config
             self._get_config_dict()
             # Refresh the settings windows
-            self._set_genfrm()
-            self._set_spfrm()
+            self._set_stngfrm(self._stngfrm)
+            self._set_spfrm(self._spfrm)
 
             # Set the units on the PLC
             self.plc.set_units(self.config.getg('unit', cast=str))
@@ -422,15 +493,16 @@ class GUI(tk.Tk):
             filetypes=[("INI file", "*.ini")]
         )
         if not save_path:
-            self._message('[STATUS] Save cancelled.')
+            self.log('[STATUS] Save cancelled.')
         elif not save_path.endswith('.ini'):
-            self._message('[WARNING] Configuration file not saved as .ini. Cancelling...')
+            self.log('[WARNING] Configuration file not saved as .ini. Cancelling...')
         else:
             self.config.save(save_path)
             self._configpath.set(save_path)
-            self._message('[STATUS] Configuration saved.')
+            self.log('[STATUS] Configuration saved.')
 
     # -----------------------------------------------------------------------------------------------------------------------
+
 
     # Calibration sequence
     # ~~~~~~~~~~~~~~~~~~~~
@@ -452,7 +524,7 @@ class GUI(tk.Tk):
         def callback():
             self.is_busy = False
             self._progressbar.stop()
-            self._log(f'[STATUS] Calibration data saved to {self._resultspath.get()}')
+            self.log(f'[STATUS] Calibration data saved to {self._resultspath.get()}')
 
         def worker():
             try:
@@ -460,7 +532,7 @@ class GUI(tk.Tk):
                     self.plc,
                     self.config,
                     self._widget_dict['general']['unit'].get(),
-                    self._log_from_thread
+                    self.log_from_thread
                 )
 
                 results = cal_seq.run()
@@ -473,7 +545,7 @@ class GUI(tk.Tk):
                     results.to_excel(save_path, index=False)
 
             except Exception as e:
-                self._log_from_thread(f"[ERROR] {e}")
+                self.log_from_thread(f"[ERROR] {e}")
 
             finally: 
                 # When the worker is finished (i.e. calibration sequence complete), the
@@ -482,22 +554,22 @@ class GUI(tk.Tk):
                 # 0 seconds")
                 self.after(0, callback)
 
-        # Only proceed if the calibration isn't already in progress.
+        # Only proceed if ready:
+        if not self.plc.connected:
+            self.log('[WARNING] PLC connection failed. Check PLC IP address and network connection.')
         if self.is_busy:
-            self._log('[STATUS] Calibration already in progress.')
+            self.log('[STATUS] Calibration already in progress.')
             return
-        
-        # Only proceed if the user selected a valid save path.
         save_path = self._resultspath.get()
         save_dir, save_filename = os.path.split(save_path)
         if not save_path:
-            self._log('[WARNING] No save path selected.')
+            self.log('[WARNING] No save path selected.')
             return
         if not save_filename.endswith(('.csv', '.xlsx')):
-            self._log('[WARNING] Invalid save file format. Please select a .csv or .xlsx file.')
+            self.log('[WARNING] Invalid save file format. Please select a .csv or .xlsx file.')
             return
         if not os.path.isdir(save_dir):
-            self._log('[WARNING] Invalid save directory.')
+            self.log('[WARNING] Invalid save directory.')
             return
 
         # Start the calibration
@@ -510,10 +582,11 @@ class GUI(tk.Tk):
 
     # -------------------------------------------------------------------------------------------------------------------------
 
+
     # Embedded cli commands
     # ~~~~~~~~~~~~~~~~~~~~~
     
-    def _log(self, msg):
+    def log(self, msg):
         '''
         Sends a message to the console window.
         '''
@@ -522,11 +595,11 @@ class GUI(tk.Tk):
         self._console.see(tk.END)
         self._console.config(state='disabled')
 
-    def _log_from_thread(self, msg):
+    def log_from_thread(self, msg):
         '''
         Safely logs messages from worker threads by scheduling them on the Tk main thread.
         '''
-        self.after(0, lambda: self._log(msg))
+        self.after(0, lambda: self.log(msg))
 
     def _execute(self, event=None):
         raw = self._entry.get()
@@ -536,13 +609,13 @@ class GUI(tk.Tk):
 
         command, *args = raw.split(' ')
 
-        self._log(f'>{raw}')
+        self.log(f'>{raw}')
 
         cmd_func = self._commands.get(command)
         if cmd_func:
             cmd_func(args)
         else:
-            self._log('[WARNING] Unknown command.')
+            self.log('[WARNING] Unknown command.')
 
     def _cmd_shutdown(self, args=None):
         '''
@@ -553,12 +626,12 @@ class GUI(tk.Tk):
         being executed on a separate thread. Maybe it will still work?
         '''
         if args and args[0] == 'hard':
-            self._log('[STATUS] Aborting...')
+            self.log('[STATUS] Aborting...')
         elif self.is_busy:
-            self._log('[WARNING] Calibration in progress. Please wait for it to finish before closing the program.')
+            self.log('[WARNING] Calibration in progress. Please wait for it to finish before closing the program.')
             return
         else:
-            self._log('[STATUS] Exiting...')
+            self.log('[STATUS] Exiting...')
 
         self.plc.close()
         self.quit()
@@ -578,11 +651,11 @@ class GUI(tk.Tk):
         Shows active pressure units.
         Reads pressure sensor input registers.
         '''
-        self._log(f'System using pressure units: {self.widget_dict["general"]["unit"].get()}')
+        self.log(f'System using pressure units: {self.widget_dict["general"]["unit"].get()}')
         transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
         for t in transducers:
             value = self.plc.read_float(ADDRESSES[t])
-            self._log(f'{t}: {value:.2f} {self.widget_dict["general"]["unit"].get()}')
+            self.log(f'{t}: {value:.2f} {self.widget_dict["general"]["unit"].get()}')
 
     def _cmd_bypass(self, args=None):
         '''
@@ -594,15 +667,15 @@ class GUI(tk.Tk):
         '''
         Lists available commands in the embedded CLI.
         '''
-        self._log('Available commands:')
+        self.log('Available commands:')
         for cmd in self._commands.keys():
-            self._log(f'  {cmd}')
+            self.log(f'  {cmd}')
 
     def _cmd_echo(self, args):
         '''
         Echoes the input arguments back to the console.
         '''
-        self._log(' '.join(args))
+        self.log(' '.join(args))
 
     def _cmd_make_busy(self, args=None):
         '''
@@ -613,10 +686,19 @@ class GUI(tk.Tk):
         else:
             self.is_busy = True
 
-
-
-
+    def _cmd_connect(self, args=None):
+        '''
+        Connect to PLC
+        '''
+        self.plc.connect()
+        unit = self.plc.get_units()
+        if self.plc.connected:
+            self.log(f'Connected to PLC.')
+            self.log(f'System using pressure units: {unit}')
+        else:
+            self.log(f'PLC connection failed. Check PLC IP address and network connection.')
     # -------------------------------------------------------------------------------------------------------------------------
+
 
     # (DEPRECATED) configuration settings methods
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

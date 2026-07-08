@@ -30,3 +30,18 @@ def write_float(value, swapped=True):
     if swapped:
             regs = regs[::-1]
     return list(regs)
+
+
+def requires_connection(func):
+    '''
+    Decorator to check if the slave is connected before executing a method.
+
+    If the slave is not connected, the method will not be executed and will return None.
+    '''
+    def wrapper(self, *args, **kwargs):
+        if not self.connected:
+            return
+        else:
+            return func(self, *args, **kwargs)
+        
+    return wrapper
