@@ -92,8 +92,8 @@ class GUI(tk.Tk):
             # ~~~~~~~~~~~~~~~~~
         pfrm = ttk.Frame(self, padding='10')
         pfrm.pack(fill='both', expand=True)
-        pfrm.columnconfigure(0, weight=0)  # left side stays fixed
-        pfrm.columnconfigure(1, weight=1)  # right side expands
+        pfrm.columnconfigure(0, weight=0)  # general options column stays fixed
+        pfrm.columnconfigure(1, weight=0)  # setpoint settings column stays fixed
         pfrm.rowconfigure(1, weight=1)
 
             # Subframes
@@ -163,7 +163,7 @@ class GUI(tk.Tk):
     def _set_stngfrm(self, frm):
         '''
         Sets up all the widgets for user settings in the [general], [customer], [device_info], 
-        and [standard_info] sections of the config. Binds the StringVars to the widgets.This 
+        and [standard_info] sections of the config. Binds the StringVars to the widgets. This 
         must be redone if the config dictionary is recreated.
         '''
         self._clear_frame(frm)
@@ -257,55 +257,39 @@ class GUI(tk.Tk):
         # Calibration
         self._setting(frm, 'Calibration: ', 'customer', 'calibration')
 
-    def _setting(self, frm, setting_name, ini_section, ini_key):
-        '''
-        To be used in the above method. Creates and packs a new setting to the table.
-        Only used for generic string entry type settings. The rest you gotta do yourself.
-        '''
-        row = ttk.Frame(frm)
-        row.pack(fill='x', pady=2)
-        ttk.Label(
-            row, text=setting_name, width=24, anchor='e'
-        ).pack(side='left')
-        ttk.Entry(
-            row, textvariable=self._widget_dict[ini_section][ini_key]
-        ).pack(side='left', fill='x', expand=True)
-
     def _set_spfrm(self, frm):
         '''
         In the future, I will make the `self._spfrm` frame into a canvas, in order to add scrolling if too many 
         setpoints are added to display at once on the screen.
         '''
         self._clear_frame(frm)
-        d = self._widget_dict
+  
         num_setpoints = self.config.getg('num_setpoints', cast=int)
-        spfrms = {}
+
         for i in range(num_setpoints):
-            spfrms[i+1] = ttk.LabelFrame(frm, text=f'Setpoint {i+1}')
-            spfrms[i+1].grid(column=0, row=i)
+
+            # Section title
+            ttk.Label(
+                frm, text=f'Setpoint {i+1}', font=('TkDefaultFont', 10, 'bold')
+            ).pack(fill='x', pady=(0, 5))
 
             # Setpoint pressure
-
-            ttk.Label(
-                spfrms[i+1], 
-                text = f'Setpoint pressure [{d['general']['unit'].get()}]: '
-            ).grid(column=0, row=0, sticky='e')
-
-            ttk.Entry(
-                spfrms[i+1], 
-                textvariable=d[f'setpoint.{i+1}']['pressure']
-            ).grid(column=1, row=0, sticky='w')
+            self._setting(
+                frm,
+                f'Setpoint pressure [{self.config.getg("unit", cast=str)}]: ',
+                f'setpoint.{i+1}',
+                'pressure',
+                extra_wide=True
+            )
 
             # Setpoint error tolerance
-            ttk.Label(
-                spfrms[i+1], 
-                text = f'Setpoint error tolerance [{d['general']['unit'].get()}]: '
-            ).grid(column=0, row=1, sticky='e')
-
-            ttk.Entry(
-                spfrms[i+1], 
-                textvariable=d[f'setpoint.{i+1}']['max_err']
-            ).grid(column=1, row=1, sticky='w')
+            self._setting(
+                frm,
+                f'Setpoint error tolerance [{self.config.getg("unit", cast=str)}]: ',
+                f'setpoint.{i+1}',
+                'max_err',
+                extra_wide=True
+            )
 
     def _set_runfrm(self, frm):
         '''
@@ -338,6 +322,23 @@ class GUI(tk.Tk):
         self._entry.pack(side='left', fill='x', expand=True, padx=(0,5))
         self._entry.bind("<Return>", self._execute)
 
+    def _setting(self, frm, setting_name, ini_section, ini_key, extra_wide=False):
+        '''
+        To be used in the above methods. Creates and packs a new setting to the table.
+        Only used for generic string entry type settings. The rest you gotta do yourself.
+        '''
+        if extra_wide:
+            w = 34
+        else:
+            w = 24
+        row = ttk.Frame(frm)
+        row.pack(fill='x', pady=2)
+        ttk.Label(
+            row, text=setting_name, width=w, anchor='e'
+        ).pack(side='left')
+        ttk.Entry(
+            row, textvariable=self._widget_dict[ini_section][ini_key]
+        ).pack(side='left', fill='x', expand=True)
 
     def _clear_frame(self, frm):
         for child in frm.winfo_children():
@@ -557,17 +558,24 @@ class GUI(tk.Tk):
         # Only proceed if ready:
         if not self.plc.connected:
             self.log('[WARNING] PLC connection failed. Check PLC IP address and network connection.')
+            return
+        
         if self.is_busy:
             self.log('[STATUS] Calibration already in progress.')
             return
+        
         save_path = self._resultspath.get()
         save_dir, save_filename = os.path.split(save_path)
-        if not save_path:
+        save_dir = save_dir or '.' # If the directory is the current directory.
+
+        if not save_path or save_path.startswith("<---"):
             self.log('[WARNING] No save path selected.')
             return
+        
         if not save_filename.endswith(('.csv', '.xlsx')):
             self.log('[WARNING] Invalid save file format. Please select a .csv or .xlsx file.')
             return
+        
         if not os.path.isdir(save_dir):
             self.log('[WARNING] Invalid save directory.')
             return
@@ -636,7 +644,6 @@ class GUI(tk.Tk):
         self.plc.close()
         self.quit()
         self.destroy()
-        sys.exit()
     
     def _cmd_clear(self, args=None):
         '''
@@ -655,7 +662,7 @@ class GUI(tk.Tk):
         transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
         for t in transducers:
             value = self.plc.read_float(ADDRESSES[t])
-            self.log(f'{t}: {value:.2f} {self.widget_dict["general"]["unit"].get()}')
+            self.log(f'{t}: {value:.2f} {self.config.getg('unit', cast=str)}')
 
     def _cmd_bypass(self, args=None):
         '''
