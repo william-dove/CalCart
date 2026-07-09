@@ -6,7 +6,7 @@ from tkinter.scrolledtext import ScrolledText
 import threading
 from calibration.calibration import CalibrationSequence
 from utils.constants import ADDRESSES, UNITS
-import sys
+import pandas as pd
 import os
 
 
@@ -39,6 +39,8 @@ class GUI(tk.Tk):
             or dynamic text labels) is linked to a tkinter `tk.StringVar` object. These StringVar objects 
             are also stored as local attributes. Many of them are stored in the _widget_dict attribute, a 
             dicitonary with all of the config INI options stored as StringVars.
+
+        - Make a dictionary of available user-entered commands.
         '''
 
         # Initialize things
@@ -71,7 +73,6 @@ class GUI(tk.Tk):
         self._statusvar = tk.StringVar(value='Status: waiting for action...')
 
         
-
         # Set up basic window and layout
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -124,6 +125,23 @@ class GUI(tk.Tk):
         confrm = ttk.LabelFrame(pfrm, text='Console', padding='10')
         confrm.grid(column=2, row=1, sticky='ns')
         self._set_confrm(confrm)
+
+
+        # Command dictionary
+        # ~~~~~~~~~~~~~~~~~~
+
+        self._commands = {
+            'help': self._cmd_help,
+            'status': self._cmd_status,
+            'stop': self._cmd_shutdown,
+            'cls': self._cmd_clear,
+            'echo': self._cmd_echo,
+            'busy': self._cmd_make_busy,
+            'bypass': self._cmd_bypass,
+            'connect': self._cmd_connect,
+            'report': self._cmd_report,
+            'apply': self._set_config_dict,
+        }
      
     # -----------------------------------------------------------------------------------------------------
 
@@ -210,7 +228,7 @@ class GUI(tk.Tk):
 
         # --Customer--
 
-        d = self._widget_dict['customer']
+        d = self._widget_dict['report']
 
         # Section title
         ttk.Label(
@@ -218,31 +236,31 @@ class GUI(tk.Tk):
         ).pack(fill='x', pady=(0, 5))
 
         # Company name
-        self._setting(frm, 'Company Name: ', 'customer', 'company')
+        self._setting(frm, 'Company Name: ', 'report', 'company')
 
         # Project name
-        self._setting(frm, 'Project Name: ', 'customer', 'project')
+        self._setting(frm, 'Project Name: ', 'report', 'project')
 
         # Service number
-        self._setting(frm, 'Service Number: ', 'customer', 'service_number')
+        self._setting(frm, 'Service Number: ', 'report', 'service_number')
 
         # Machine name
-        self._setting(frm, 'Machine Name: ', 'customer', 'machine')
+        self._setting(frm, 'Machine Name: ', 'report', 'machine')
 
         # Location
-        self._setting(frm, 'Location: ', 'customer', 'location')
+        self._setting(frm, 'Location: ', 'report', 'location')
 
         # Date
-        self._setting(frm, 'Date: ', 'customer', 'date')
+        self._setting(frm, 'Date: ', 'report', 'date')
 
         # Calibration type
-        self._setting(frm, 'Calibration Type: ', 'customer', 'calibration_type')
+        self._setting(frm, 'Calibration Type: ', 'report', 'calibration_type')
 
         # Procedure
-        self._setting(frm, 'Procedure: ', 'customer', 'procedure')
+        self._setting(frm, 'Procedure: ', 'report', 'procedure')
 
         # Calibration
-        self._setting(frm, 'Calibration: ', 'customer', 'calibration')
+        self._setting(frm, 'Calibration: ', 'report', 'calibration')
 
     def _set_spfrm(self, frm):
         '''
@@ -392,7 +410,7 @@ class GUI(tk.Tk):
             }
         self._widget_dict = widget_dict
 
-    def _set_config_dict(self):
+    def _set_config_dict(self, args=None):
         '''
         Activates when the "Apply Changes" button is pressed.
         Takes the widget dict attribute of the gui class, which may have been edited
@@ -406,7 +424,7 @@ class GUI(tk.Tk):
         * When the user increases the number of setpoints and applies the change, the additional sections in
             the INI are created with the same values as `[setpoint.1]`.
 
-        :param skip: (tuple) list of sections to skip when applying changes. Mainly used to skip the 'units' setting.
+        **This docstring may not be up-to-date but I'm too lazy to rewrite it.
         '''
         widget_dict = self._widget_dict
         config_dict = {}
@@ -434,7 +452,8 @@ class GUI(tk.Tk):
         self._set_spfrm(self._spfrm)
 
         # Set the units on the PLC.
-        self.plc.set_units(self.config.getg('unit', cast=str))
+        if self.plc.connected:
+            self.plc.set_units(self.config.getg('unit', cast=str))
 
     def _load_config(self):
         '''
@@ -525,12 +544,7 @@ class GUI(tk.Tk):
 
                 results = cal_seq.run()
 
-                save_path = self._resultspath.get()
-
-                if save_path.endswith(".csv"):
-                    results.to_csv(save_path, index=False)
-                elif save_path.endswith(".xlsx"):
-                    results.to_excel(save_path, index=False)
+                self._save_results(results)
 
             except Exception as e:
                 self.log_from_thread(f"[ERROR] {e}")
@@ -575,6 +589,17 @@ class GUI(tk.Tk):
             daemon=True
         ).start()
 
+    def _save_results(self, results):
+        '''
+        Saves the results.
+        '''
+        save_path = self._resultspath.get()
+
+        if save_path.endswith(".csv"):
+            results.to_csv(save_path, index=False)
+        elif save_path.endswith(".xlsx"):
+            results.to_excel(save_path, index=False)
+
     # -------------------------------------------------------------------------------------------------------------------------
 
 
@@ -586,7 +611,7 @@ class GUI(tk.Tk):
         Sends a message to the console window.
         '''
         self._console.config(state='normal')
-        self._console.insert(tk.END, msg+'\n')
+        self._console.insert(tk.END, str(msg)+'\n')
         self._console.see(tk.END)
         self._console.config(state='disabled')
 
@@ -594,7 +619,7 @@ class GUI(tk.Tk):
         '''
         Safely logs messages from worker threads by scheduling them on the Tk main thread.
         '''
-        self.after(0, lambda: self.log(msg))
+        self.after(0, lambda: self.log(str(msg)))
 
     def _execute(self, event=None):
         raw = self._entry.get()
@@ -645,17 +670,21 @@ class GUI(tk.Tk):
         Shows active pressure units.
         Reads pressure sensor input registers.
         '''
-        self.log(f'System using pressure units: {self.config.getg('unit', cast=str)}')
-        transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
-        for t in transducers:
-            value = self.plc.read_float(ADDRESSES[t])
-            self.log(f'{t}: {value:.2f} {self.config.getg('unit', cast=str)}')
+        if self.plc.connected:
+            self.log(f'System using pressure units: {self.config.getg('unit', cast=str)}')
+            transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
+            for t in transducers:
+                value = self.plc.read_float(ADDRESSES[t])
+                self.log(f'{t}: {value:.2f} {self.config.getg('unit', cast=str)}')
+        else:
+            self.log('Offline.')
 
     def _cmd_bypass(self, args=None):
         '''
         Bypasses the startup sequence in UniLogic.
         '''
-        self.plc.write_coil(ADDRESSES['bypass_startup'], value=True)
+        if self.plc.connected:
+            self.plc.write_coil(ADDRESSES['bypass_startup'], value=True)
 
     def _cmd_help(self, args=None):
         '''
@@ -684,10 +713,30 @@ class GUI(tk.Tk):
         '''
         Connect to PLC
         '''
-        self.plc.connect()
-        unit = self.plc.get_units()
-        if self.plc.connected:
+        try:
+            self.plc.connect()
+            unit = self.plc.get_units()
             self.log(f'Connected to PLC.')
             self.log(f'System using pressure units: {unit}')
-        else:
-            self.log(f'PLC connection failed. Check PLC IP address and network connection.')
+        except Exception as e:
+            self.log(f'Error: {e}. Check PLC IP address and network connection.')
+
+    def _cmd_report(self, args):
+        '''
+        Saves a report with artificial setpoint data.
+
+        :args[0]: path to save results at.
+        '''
+        try:
+            fake = CalibrationSequence(
+                self.plc,
+                self.config,
+                self.log
+            )
+            fake.generate_report(args[0])
+
+        except Exception as e:
+            self.log(f'[ERROR] {e}.')
+
+        finally:
+            self.log('Report saved.')

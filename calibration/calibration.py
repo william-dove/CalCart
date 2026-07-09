@@ -1,7 +1,9 @@
 #calibration/calibration.py
 import time
 import pandas as pd
+import xlwings as xw
 from utils.constants import ADDRESSES
+from config.settings import SETTINGS
 
 # Defines the calibration sequence.
 
@@ -58,13 +60,41 @@ class CalibrationSequence:
         
         # Save results
         self.log('[STATUS] Calibration sequence complete!')
-        return pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
-        
+        self.results = pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
+        return self.results
+    
+    def generate_report(self, resultspath):
+        '''
+        Makes a PDF report after running a calibration sequence from the GUI.
+
+        Currently does not include setpoint data.
+        Currently saves an excel file, not a PDF.
+        '''
+        def fill(resultspath):
+            with xw.App(visible=False) as app:
+                wb = app.books.open('calibration/template.xltx')
+                ws = wb.sheets['Sheet1']
+
+                # Fill in blanks
+                for s in SETTINGS:
+                    if s.report_cell is not None:
+                        val = self.config.get(s.section, s.key, cast=str)
+                        cell = s.report_cell
+                        ws[cell].value = val
+
+                wb.save(resultspath)
+
+        try:
+            fill(resultspath)
+        except Exception as e:
+            self.log(f'[ERROR] {e}.\nFailed to open Excel file. Check if the file is already open in Excel.')
+
     # ----------------------------------------------------------------------------------------------------------------------------
+
 
     # Helpers
     # ~~~~~~~
-    
+
     def _apply_setpoint(self, sp):
         '''
         Communicates with the PLC to apply a setpoint.

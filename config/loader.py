@@ -2,7 +2,8 @@
 import configparser
 from io import StringIO
 import os
-from utils.constants import UNITS, CONVERSION, DEFAULT_VALUES
+from utils.constants import UNITS, CONVERSION
+from config.settings import SETTINGS
 
 class ConfigLoader:
     def __init__(self):
@@ -26,17 +27,17 @@ class ConfigLoader:
         self.config = configparser.ConfigParser()
         self.path = None
 
-        for key, val in DEFAULT_VALUES.items():
-            self.config['DEFAULT'][key] = val
+        for s in SETTINGS:
+            if s.default is not None:
+                self.config['DEFAULT'][s.key] = s.default
         
         # Initialize sections of the INI (each section inherits values from DEFAULT)
         self.config.add_section('general') 
         self.config.add_section('setpoint.1') 
-        self.config.add_section('customer')
-        self.config.add_section('device')
-        self.config.add_section('standard')
+        self.config.add_section('report')
     
     # -----------------------------------------------------------------------------------------------------------------------------
+
 
     # Read/write config from file
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -58,6 +59,7 @@ class ConfigLoader:
         self.path = path
     
     # ----------------------------------------------------------------------------------------------------------------------------
+
 
     # Read/write config from UI
     # ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -84,6 +86,7 @@ class ConfigLoader:
                 self.set(section, key, val)
 
     # --------------------------------------------------------------------------------------------------------------------------------
+
 
     # Methods for retrieving/setting values
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -165,6 +168,7 @@ class ConfigLoader:
 
     # ----------------------------------------------------------------------------------------------------------------------------------
 
+
     # Setting active units
     # ~~~~~~~~~~~~~~~~~~~~
 
@@ -204,6 +208,7 @@ class ConfigLoader:
 
 
     # ----------------------------------------------------------------------------------------------------------------------------------
+
 
     # I/O and utilities
     # ~~~~~~~~~~~~~~~~~

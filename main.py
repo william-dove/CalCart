@@ -11,10 +11,12 @@ def main():
 
     # Initialize plc communications
     plc = Slave("192.168.1.12")
-    plc.connect()
 
-    # Read current pressure units
-    unit = plc.get_units()
+    try:
+        plc.connect()
+        unit = plc.get_units() # Read current pressure units
+    except Exception as e:
+        print(e)
 
     # Load test configuration
     config = ConfigLoader()
@@ -30,7 +32,7 @@ def main():
         root.log(f'Connected to PLC.')
         root.log(f'System using pressure units: {unit}')
     else:
-        root.log(f'PLC connection failed. Check PLC IP address and network connection.')
+        root.log(f'PLC connection failed. Operating in offline mode.')
 
     root.mainloop()
 

@@ -38,6 +38,10 @@ CONVERSION = {
 }
 
 # Default values for the "DEFAULT" section of the config .ini
+# This is now outdated; the dictionary config.settings.SETTINGS is preferred: it is a 
+# dictionary of dataclass objects with various bits of information, including INI 
+# section, INI key, default value, report excell cell (where applicable), description, etc.
+# Still, I don't want to change the GUI code for the 100th time even if it would be more efficient, so I won't get rid of this.
 DEFAULT_VALUES = {
     # [general]
     'setpoint_wait': '30', # [s] (general section)
@@ -47,7 +51,7 @@ DEFAULT_VALUES = {
     'num_setpoints':  '1', # (general section)
     'autotune_each': 'no', # (general section)
     'unit': 'Torr', # **Units set by the PLC**
-    # [customer]
+    # [report]
     'company': 'Company Name',
     'project': 'Project Name',
     'service_number': 'Service Number',
@@ -57,19 +61,17 @@ DEFAULT_VALUES = {
     'calibration_type': 'Calibration Type',
     'procedure': 'Procedure',
     'calibration': 'Calibration',
-    # [device]
-    'manufacturer': 'Manufacturer',
-    'model_number': 'Model Number',
-    'serial_number': 'Serial Number',
-    'tag_id_number': 'Tag/ID Number',
-    'range': 'Range',
-    'device_accuracy': 'Device Accuracy',
-    'output_signal': 'Output Signal',
-    # [standard]
-    'calibration_date': 'Calibration Date',
-    'calibration_due_date': 'Calibration Due Date',
-    'standard_accuracy': 'Standard Accuracy',
-    'accuracy_ratio': 'Accuracy Ratio',
+    'dev_manufacturer': 'Manufacturer',
+    'dev_model_number': 'Model Number',
+    'dev_serial_number': 'Serial Number',
+    'dev_tag_id_number': 'Tag/ID Number',
+    'dev_range': 'Range',
+    'dev_device_accuracy': 'Device Accuracy',
+    'dev_output_signal': 'Output Signal',
+    'std_calibration_date': 'Calibration Date',
+    'std_calibration_due_date': 'Calibration Due Date',
+    'std_standard_accuracy': 'Standard Accuracy',
+    'std_accuracy_ratio': 'Accuracy Ratio',
     # [setpoint.i]
     'pressure': '1', # (setpoint section) Units set by the PLC
     'max_err': '0.05'
