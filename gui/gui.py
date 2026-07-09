@@ -29,16 +29,16 @@ class GUI(tk.Tk):
             ("local" attributes are given a leading underscore, and represent variables only
             used within the class)
 
-        - Set up the basic window format. The parent window (`frm`) is a child of the Tkinter root 
-            (this class) and the parent of other subwindows for different user I/O.
+        - Set up the basic window format. The parent frame (`pfrm`) lives within the `tk.Tk` window 
+            and other subframes (for different user I/O) are children of this frame. Frames
+            that remain static after being formed are just instantiated within the __init__ method,
+            but frames like the user settings or command console need to be refreshed are stored as local
+            attributes.
         
-        - Add GUI I/O elements to the subwindows defined above. The I/O objects are linked to Tkinter 
-            StringVar objects, which are stored in a local attribute dictionaries `self_dcondif` and `self._spconfigs`. 
-            The dictionary keys match those of the settings in the INI configuration file.  
-            The `._initddict()` and `._initspdicts()` methods are used to read the values for each setting in a loaded
-            INI configuration file, and set the local dictionary of StringVars to match.
-            The `._setddict()` and `._setspdicts()` methods write back the edited StringVar values to the config, which
-            is then saved as a new configuration file.
+        - Add ttk I/O elements to the subwindows defined above. Each text element (e.g., input entry boxes
+            or dynamic text labels) is linked to a tkinter `tk.StringVar` object. These StringVar objects 
+            are also stored as local attributes. Many of them are stored in the _widget_dict attribute, a 
+            dicitonary with all of the config INI options stored as StringVars.
         '''
 
         # Initialize things
@@ -55,35 +55,22 @@ class GUI(tk.Tk):
         self.plc = plc # stateful reference to variable `plc` in main
         self.config = config # stateful reference to variable `config` in main
         
-        # Get the INI path as a StringVar
-        if self.config.path is not None: # i.e. if the user loaded a config path on startup
-            self._configpath = tk.StringVar(value=self.config.path) 
-        else: # If the user did not load a config path, use the defualt config settings and prompt the user to select a config file.
-            self._configpath = tk.StringVar(value='<--- Select a configuration.')
+        # Initialize the config INI path as a StringVar
+        self._configpath = tk.StringVar(value='<--- Select a configuration.')
 
-        # Initialize the "save results directory" tkinter variable
+        # Initialize the "save results directory" path as a StringVar
         self._resultspath = tk.StringVar(value="<--- Choose where to save calibration data.")
 
-        # Initialize the widget setting dictionary
+        # Initialize the _widget_dict attribute
         self._get_config_dict()
 
-        # Make indicator to block the cli from input
+        # Initialize an indicator for if a calibration is being made.
         self.is_busy = False
 
-        # Initialize the status variable
+        # Initialize the status variable (currently not used)
         self._statusvar = tk.StringVar(value='Status: waiting for action...')
 
-        # Initialize command dicitonary
-        self._commands = {
-            'help': self._cmd_help,
-            'status': self._cmd_status,
-            'stop': self._cmd_shutdown,
-            'cls': self._cmd_clear,
-            'echo': self._cmd_echo,
-            'busy': self._cmd_make_busy,
-            'bypass': self._cmd_bypass,
-            'connect': self._cmd_connect
-        }
+        
 
         # Set up basic window and layout
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -658,7 +645,7 @@ class GUI(tk.Tk):
         Shows active pressure units.
         Reads pressure sensor input registers.
         '''
-        self.log(f'System using pressure units: {self.widget_dict["general"]["unit"].get()}')
+        self.log(f'System using pressure units: {self.config.getg('unit', cast=str)}')
         transducers = ['MKS 1 pressure', 'MKS 2 pressure', 'MKS 3 pressure']
         for t in transducers:
             value = self.plc.read_float(ADDRESSES[t])
@@ -704,50 +691,3 @@ class GUI(tk.Tk):
             self.log(f'System using pressure units: {unit}')
         else:
             self.log(f'PLC connection failed. Check PLC IP address and network connection.')
-    # -------------------------------------------------------------------------------------------------------------------------
-
-
-    # (DEPRECATED) configuration settings methods
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def _initddict(self):
-        '''
-        Retrieves the ddict from the config and converts every string value to a tkinter StringVar.
-
-        Only use this initially! once self.dconfig references the StringVars, they can't be reassigned.
-        '''
-        dconfig_Strings = self.config.getddict()
-        dconfig_StringVars = {}
-        for config_key, config_val in dconfig_Strings.items():
-            dconfig_StringVars[config_key] = tk.StringVar(value=config_val)
-        self._dconfig = dconfig_StringVars
-    
-    def _initspdicts(self):
-        '''
-        Reads the setpoint dicts from the loaded config (if it exists) or the default options (one setpoint).
-
-        Unlike ._initddict(), this one can be called again for a new or updated configuration since the whole
-        ._spfrm window is regenerated with new widgets, which can be bound to the new StringVars.
-        '''
-        sp_dict_Strings = self.config.getspdicts()
-        sp_dict_StringVars = {}
-        for sp_key, spconfig_Strings in sp_dict_Strings.items():
-            spconfig_StringVars = {}
-            sp_dict_StringVars[sp_key] = spconfig_StringVars
-            for config_key, config_val in spconfig_Strings.items():
-                sp_dict_StringVars[sp_key][config_key] = tk.StringVar(value=config_val)
-        self._spconfigs = sp_dict_StringVars
-
-    def _setddict(self):
-        '''
-        Used to apply changes to the settings made in the GUI
-        Sends the altered StringVar ddict back to the config as a plain String ddict.
-
-        If an incorrect value has been entered (i.e., someone enteres a letter instead of
-        a number), the value won't be updated.
-        '''
-        dconfig_Strings = {}
-        for config_key, config_val in self._dconfig.items():
-            dconfig_Strings[config_key] = config_val.get() # Convert from tk.StringVars to normal Strings
-        self.config.setddict(dconfig_Strings)
-

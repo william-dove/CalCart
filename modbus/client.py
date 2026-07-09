@@ -1,34 +1,10 @@
 #modbus/client.py
 from pymodbus.client import ModbusTcpClient
+import threading
 from utils.modbus_helpers import read_float, write_float, requires_connection
 from utils.constants import ADDRESSES, UNITS
 
-# The MethodInterceptor class may not be necessary anymore (Using decorator instead), 
-# but I will leave it here for now in case I want to use it later.
-
-# class MethodInterceptor():
-#     '''
-#     A parent class to add pre-method call logic.
-#     I'm using this to check whether the slave is connected before any read/write method is called.
-#     '''
-#     def __getattribute__(self, name):
-#         attr = object.__getattribute__(self, name)
-
-#         if callable(attr) and name not in ('__init__', 'connect', 'close'):
-#             def wrapper(*args, **kwargs):
-#                 if not object.__getattribute__(self, 'connected'):
-#                     return
-#                 else:
-#                     return attr(*args, **kwargs)
-                
-#             return wrapper
-        
-#         else:
-#             return attr
-        
-
-# Establishes communications with the PLC as modbus slave
-class Slave():
+class Slave:
     '''
     This basically is an improved version of the global `slave` object in CalCart.py.
     It self-handles connection/errors on initialization, and you can use the read/write methods
@@ -37,18 +13,36 @@ class Slave():
     Also, the .master attribute is basically adding the slave's master as an attribute
     (or the server's client as an attribute if you prefer)
 
+    __init__ parameters:
     :param ip: (str) UniStream panel IP address
     '''
     def __init__(self, ip):
         self.master = ModbusTcpClient(ip, timeout=3)
+        self._lock = threading.Lock()
         self.connected = False
         
     def connect(self):
-        # If the connection fails, the `connected` attribute will remain False and all read/write methods will be disabled.
-        if not self.master.connect():
+        '''
+        Attempt to connect to the PLC if not already connected.
+        If connection fails: the method returns None, `self.connected`
+        remains False and all read/write methods will be disabled.
+        '''
+        if self.connected:
             return
+        
+        if not self.master.connect():
+            raise ConnectionError('Failed to connect to PLC.')
+
         # Stop users from changing units on the PLC once they can be changed from the GUI.
-        self.write_coil(ADDRESSES['change_units_enabled'], value=False) 
+        with self._lock:
+            resp = self.master.write_coil(
+                ADDRESSES['change_units_enabled'],
+                value=False
+            )
+
+            if resp.isError():
+                raise ConnectionError('Failed to connect to PLC.')
+        
         self.connected = True
 
     @requires_connection
@@ -60,10 +54,13 @@ class Slave():
 
         :param address: The modbus address which is assigned in UniLogic.
         '''
-        resp = self.master.read_input_registers(address=address, count=2)
-        if resp.isError():
-            raise RuntimeError(f'Read error: {resp}')
-        return read_float(resp.registers)
+        with self._lock:
+            resp = self.master.read_input_registers(address=address, count=2)
+
+            if resp.isError():
+                raise ConnectionError(f'Read error: {resp}')
+            
+            return read_float(resp.registers)
     
     @requires_connection
     def write_float(self, address, value):
@@ -74,35 +71,48 @@ class Slave():
 
         :param address: The modbus address which is assigned in UniLogic.
         '''
-        regs = write_float(value)
-        self.master.write_registers(address=address, values=regs)
+        with self._lock:
+            regs = write_float(value)
+            resp = self.master.write_registers(address=address, values=regs)
+
+            if resp.isError():
+                raise ConnectionError(f'Write error: {resp}')
 
     @requires_connection
     def read_coil(self, address):
         '''
         Reads boolean values from the respective modbus address.
         '''
-        resp = self.master.read_coils(address=address, count=1)
-        if resp.isError():
-            raise RuntimeError(f'Read error: {resp}')
-        return resp.bits[0]
+        with self._lock:
+            resp = self.master.read_coils(address=address, count=1)
+
+            if resp.isError():
+                raise ConnectionError(f'Read error: {resp}')
+            
+            return resp.bits[0]
     
     @requires_connection
     def write_coil(self, address, value):
          '''
          You get the idea.
          '''
-         self.master.write_coil(address=address, value=value)
+         with self._lock:
+            resp = self.master.write_coil(address=address, value=value)
+
+            if resp.isError():
+                raise ConnectionError(f'Write error: {resp}')
 
     @requires_connection
     def get_units(self):
         '''
         Reads the 16-bit Int (INT16) which represents the active unit.
         '''
-        resp = self.master.read_input_registers(address=ADDRESSES['pressure_units'])
-        if resp.isError():
-            raise RuntimeError(f'Read error: {resp}')
-        else:
+        with self._lock:
+            resp = self.master.read_input_registers(address=ADDRESSES['pressure_units'])
+
+            if resp.isError():
+                raise ConnectionError(f'Read error: {resp}')
+            
             idx = resp.registers[0]
             return UNITS[idx]
         
@@ -113,13 +123,17 @@ class Slave():
 
         :param new_unit: str (must be one of the values in UNITS)
         '''
-        if new_unit not in UNITS.values():
-            raise ValueError(f'Invalid unit: {new_unit}. Must be one of {list(UNITS.values())}')
-        
-        idx = next(key for key, value in UNITS.items() if value == new_unit)
+        with self._lock:
+            if new_unit not in UNITS.values():
+                raise ValueError(f'Invalid unit: {new_unit}. Must be one of {list(UNITS.values())}')
+            
+            idx = next(key for key, value in UNITS.items() if value == new_unit)
 
-        self.master.write_register(address=ADDRESSES['pressure_units'], value=idx)
+            resp = self.master.write_register(address=ADDRESSES['pressure_units'], value=idx)
 
+            if resp.isError():
+                raise ConnectionError(f'Write error: {resp}')
 
     def close(self):
+        self.connected = False
         self.master.close()

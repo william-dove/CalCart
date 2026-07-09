@@ -36,3 +36,42 @@ CONVERSION = {
     'Pascal': 133.322,
     'kPa': 0.133322
 }
+
+# Default values for the "DEFAULT" section of the config .ini
+DEFAULT_VALUES = {
+    # [general]
+    'setpoint_wait': '30', # [s] (general section)
+    'sample_rate': '10', # [Hz] (general section)
+    'setpoint_settle': '60', # [s] (general section) setpoint must be within tolerance for this much time to be considered "settled"
+    'setpoint_timeout': '300', # [s] (general section)
+    'num_setpoints':  '1', # (general section)
+    'autotune_each': 'no', # (general section)
+    'unit': 'Torr', # **Units set by the PLC**
+    # [customer]
+    'company': 'Company Name',
+    'project': 'Project Name',
+    'service_number': 'Service Number',
+    'machine': 'Machine Name',
+    'location': 'Location',
+    'date': 'Date',
+    'calibration_type': 'Calibration Type',
+    'procedure': 'Procedure',
+    'calibration': 'Calibration',
+    # [device]
+    'manufacturer': 'Manufacturer',
+    'model_number': 'Model Number',
+    'serial_number': 'Serial Number',
+    'tag_id_number': 'Tag/ID Number',
+    'range': 'Range',
+    'device_accuracy': 'Device Accuracy',
+    'output_signal': 'Output Signal',
+    # [standard]
+    'calibration_date': 'Calibration Date',
+    'calibration_due_date': 'Calibration Due Date',
+    'standard_accuracy': 'Standard Accuracy',
+    'accuracy_ratio': 'Accuracy Ratio',
+    # [setpoint.i]
+    'pressure': '1', # (setpoint section) Units set by the PLC
+    'max_err': '0.05'
+    
+}

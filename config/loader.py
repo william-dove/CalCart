@@ -2,52 +2,31 @@
 import configparser
 from io import StringIO
 import os
-from utils.constants import UNITS, CONVERSION
+from utils.constants import UNITS, CONVERSION, DEFAULT_VALUES
 
 class ConfigLoader:
     def __init__(self):
+        '''
+        Attributes:
+            - .config is the actual ConfigParser object for the INI
+            - .path is the path to the INI file
+
+        Initializing `self.config["DEFAULT"]`:
+            - The DEFAULT_VALUES dict currently houses all the default settings for the INI.
+                In the future, I would like to just make an actual defualt INI with these
+                settings, and just read that to the config. But for now this works.
+        
+        Initializing other sections:
+            - Each other section will be used for its respective purpose and values
+                will be changed accordingly. Each section actually inherits every value
+                from DEFAULT, but only the ones that actually belong to that section will
+                actually be read/overwritten in that respective section.
+            - (See utils.constants for the description of each setting and its default value).
+        '''
         self.config = configparser.ConfigParser()
         self.path = None
 
-        # Define and initialize the default values for the "DEFAULT" section of the config .ini
-        default_values = {
-            # [general]
-            'setpoint_wait': '30', # [s] (general section)
-            'sample_rate': '10', # [Hz] (general section)
-            'setpoint_settle': '60', # [s] (general section) setpoint must be within tolerance for this much time to be considered "settled"
-            'setpoint_timeout': '300', # [s] (general section)
-            'num_setpoints':  '1', # (general section)
-            'autotune_each': 'no', # (general section)
-            'unit': 'Torr', # **Units set by the PLC**
-            # [customer]
-            'company': 'Company Name',
-            'project': 'Project Name',
-            'service_number': 'Service Number',
-            'machine': 'Machine Name',
-            'location': 'Location',
-            'date': 'Date',
-            'calibration_type': 'Calibration Type',
-            'procedure': 'Procedure',
-            'calibration': 'Calibration',
-            # [device]
-            'manufacturer': 'Manufacturer',
-            'model_number': 'Model Number',
-            'serial_number': 'Serial Number',
-            'tag_id_number': 'Tag/ID Number',
-            'range': 'Range',
-            'device_accuracy': 'Device Accuracy',
-            'output_signal': 'Output Signal',
-            # [standard]
-            'calibration_date': 'Calibration Date',
-            'calibration_due_date': 'Calibration Due Date',
-            'standard_accuracy': 'Standard Accuracy',
-            'accuracy_ratio': 'Accuracy Ratio',
-            # [setpoint.i]
-            'pressure': '1', # (setpoint section) Units set by the PLC
-            'max_err': '0.05'
-            
-        }
-        for key, val in default_values.items():
+        for key, val in DEFAULT_VALUES.items():
             self.config['DEFAULT'][key] = val
         
         # Initialize sections of the INI (each section inherits values from DEFAULT)
@@ -171,7 +150,7 @@ class ConfigLoader:
         try:
             return self.config['general'].getboolean(key)
         except ValueError:
-            print(f'[WARNING] Invalid boolean for {key}, defaulting to {default}')
+            #print(f'[WARNING] Invalid boolean for {key}, defaulting to {default}')
             return default
         
     def getbool(self, section, key, default=False):
@@ -181,7 +160,7 @@ class ConfigLoader:
         try:
             return self.config[section].getboolean(key)
         except ValueError:
-            print(f'[WARNING] Invalid boolean for {key}, defaulting to {default}')
+            #print(f'[WARNING] Invalid boolean for {key}, defaulting to {default}')
             return default
 
     # ----------------------------------------------------------------------------------------------------------------------------------
@@ -236,23 +215,3 @@ class ConfigLoader:
         buffer = StringIO()
         self.config.write(buffer)
         return buffer.getvalue()
-
-    # -----------------------------------------------------------------------------------------------------------------------------------
-
-    # (DEPRECATED)
-    # ~~~~~~~~~~~~
-
-    def getddict(self):
-        '''
-        Returns a dict of the DEFAUlT section as strings
-        '''
-        return dict(self.config['DEFAULT'])
-
-    def getspdicts(self):
-        '''
-        returns a nested dictionary of of the setpoint settings
-        '''
-        sps = {}
-        for i in range(self.getd('num_setpoints', cast=int)):
-            sps[f'setpoint.{i+1}'] = dict(self.config[f'setpoint.{i+1}'])
-        return sps

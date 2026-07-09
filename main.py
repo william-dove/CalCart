@@ -7,29 +7,32 @@ from utils.constants import ADDRESSES, UNITS
 
 # -----------------------------------------------------------------------
 
-# Initialize plc communications
-plc = Slave("192.168.1.12")
-plc.connect()
+def main():
 
-# Read current pressure units
-unit = plc.get_units()
+    # Initialize plc communications
+    plc = Slave("192.168.1.12")
+    plc.connect()
 
-# Load test configuration
-config = ConfigLoader()
+    # Read current pressure units
+    unit = plc.get_units()
 
-if plc.connected:
-    config.units(unit) # Set the active units in the config to match the PLC's units
+    # Load test configuration
+    config = ConfigLoader()
 
-# Initialize tkinter window references Class variables `plc` and `config` (initialized above)
-root = GUI(plc, config)
+    if plc.connected:
+        config.units(unit) # Set the active units in the config to match the PLC's units
 
-# Print system information to embedded console
-if plc.connected:
-    root.log(f'Connected to PLC.')
-    root.log(f'System using pressure units: {unit}')
-else:
-    root.log(f'PLC connection failed. Check PLC IP address and network connection.')
+    # Initialize tkinter window references Class variables `plc` and `config` (initialized above)
+    root = GUI(plc, config)
 
+    # Print system information to embedded console
+    if plc.connected:
+        root.log(f'Connected to PLC.')
+        root.log(f'System using pressure units: {unit}')
+    else:
+        root.log(f'PLC connection failed. Check PLC IP address and network connection.')
+
+    root.mainloop()
 
 if __name__ == "__main__":
-    root.mainloop()
+    main()

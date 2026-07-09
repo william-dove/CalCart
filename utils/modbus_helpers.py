@@ -1,6 +1,6 @@
 #utils/modbus_helpers.py
-
 import struct
+from functools import wraps
 
 def read_float(regs, swapped=True):
     '''
@@ -36,12 +36,18 @@ def requires_connection(func):
     '''
     Decorator to check if the slave is connected before executing a method.
 
-    If the slave is not connected, the method will not be executed and will return None.
+    If the slave is not connected, connection is attempted. If this fails, 
+    the method will not be executed and will return None.
     '''
+    @wraps(func) # Preserves docstrings etc.
     def wrapper(self, *args, **kwargs):
-        if not self.connected:
-            return
-        else:
+        self.connect() # Attempt reconnection
+        
+        try:
             return func(self, *args, **kwargs)
+        
+        except Exception:
+             self.connected = False
+             raise
         
     return wrapper

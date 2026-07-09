@@ -1,32 +1,39 @@
 #calibration/calibration.py
 import time
 import pandas as pd
-from tkinter import filedialog
 from utils.constants import ADDRESSES
 
 # Defines the calibration sequence.
 
 class CalibrationSequence:
-    def __init__(self, plc, config, unit, log_callback):
+    '''
+    A stateless class which is instantiated within the `GUI` to execute a calibration sequence.
+    After the calibration is complete, the instance is discarded.
+
+    __init__ parameters:
+    :param plc: class Slave
+    :param config: class ConfigLoader
+    :param addresses: dict of Modbus addresses assigned by PLC
+    :param log_callback: callable used to emit status messages in the Tk main thread.
+    '''
+    def __init__(self, plc, config, log_callback):
         '''
-        :param plc: class Slave
-        :param config: class ConfigLoader
-        :param addresses: dict of Modbus addresses assigned by PLC
-        :param units: str (pressure unit)
-        :param log_callback: callable used to emit status messages in the Tk main thread.
+        Initialize object references.
+            - `log_callback` is a method of the `GUI` class, which is called here
+                to print updates to the console during calibration.
+
+        Determine units from config.
         '''
-        self.plc = plc # class Slave (defined in `client.py`)
+        self.plc = plc
         self.config = config
         self.ad = ADDRESSES # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
-        self.unit = unit
         self.log = log_callback
 
-        self.newmsg = False
-        self.msg = None
+        self.unit = self.config.getg('unit', cast=str)
 
     def run(self):
         '''
-        Runs a calibration sequence using the plc and config specified during initialization.
+        Runs a calibration sequence using the plc and config specified during instantiation.
 
         :return: dataframe containing results of calibration sequence.
         '''
@@ -55,6 +62,9 @@ class CalibrationSequence:
         
     # ----------------------------------------------------------------------------------------------------------------------------
 
+    # Helpers
+    # ~~~~~~~
+    
     def _apply_setpoint(self, sp):
         '''
         Communicates with the PLC to apply a setpoint.
