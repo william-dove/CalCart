@@ -1,12 +1,22 @@
 #gui/gui.py 
+
+# Local
+from gui.frames import (
+    FileFrame,
+    GeneralSettingsFrame,
+    SetpointSettingsFrame,
+    CalibrationRunFrame,
+)
+from gui.cli import ConsoleFrame
+from calibration.calibration import CalibrationSequence
+from utils.constants import ADDRESSES
+
+# Other
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
-from tkinter.scrolledtext import ScrolledText
+
 import threading
-from calibration.calibration import CalibrationSequence
-from utils.constants import ADDRESSES, UNITS
-import pandas as pd
 import os
 
 
@@ -37,391 +47,61 @@ class GUI(tk.Tk):
         
         - Add ttk I/O elements to the subwindows defined above. Each text element (e.g., input entry boxes
             or dynamic text labels) is linked to a tkinter `tk.StringVar` object. These StringVar objects 
-            are also stored as local attributes. Many of them are stored in the _widget_dict attribute, a 
+            are also stored as local attributes. Many of them are stored in the widget_dict attribute, a 
             dicitonary with all of the config INI options stored as StringVars.
 
         - Make a dictionary of available user-entered commands.
         '''
 
-        # Initialize things
-        # ~~~~~~~~~~~~~~~~~
+        # Setup the window and important attributes
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         super().__init__() # Initialize the parent class (Tkinter root window)
 
-        # Setup gui window
         self.title("CalCart 2025 IMA Life North America")
         self.iconbitmap("./gui/logo.ico")
-        self.protocol("WM_DELETE_WINDOW", self._cmd_shutdown)
+        self.protocol("WM_DELETE_WINDOW", self.shutdown)
 
         # Initialize object references
         self.plc = plc # stateful reference to variable `plc` in main
         self.config = config # stateful reference to variable `config` in main
         
-        # Initialize the config INI path as a StringVar
-        self._configpath = tk.StringVar(value='<--- Select a configuration.')
+        # Initialize attributes
+        self.configpath = tk.StringVar(value='<--- Select a configuration.')
+        self.resultspath = tk.StringVar(value="<--- Choose where to save calibration data.")
+        self.statusvar = tk.StringVar(value='Status: waiting for action...') # Displays current activities
+        self.is_busy = False # Indicator on when a calibration is being made
 
-        # Initialize the "save results directory" path as a StringVar
-        self._resultspath = tk.StringVar(value="<--- Choose where to save calibration data.")
-
-        # Initialize the _widget_dict attribute
-        self._get_config_dict()
-
-        # Initialize an indicator for if a calibration is being made.
-        self.is_busy = False
-
-        # Initialize the status variable (currently not used)
-        self._statusvar = tk.StringVar(value='Status: waiting for action...')
+        # Initialize the widget_dict attribute based on `self.config`
+        self.config_to_widgets()
 
         
-        # Set up basic window and layout
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Set up basic frame/subframe layout
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-            # Main/Parent Frame
-            # ~~~~~~~~~~~~~~~~~
-        pfrm = ttk.Frame(self, padding='10')
-        pfrm.pack(fill='both', expand=True)
-        pfrm.columnconfigure(0, weight=0)  # general options column stays fixed
-        pfrm.columnconfigure(1, weight=0)  # setpoint settings column stays fixed
-        pfrm.rowconfigure(1, weight=1)
+        # Main/Parent Frame
+        self.frame = ttk.Frame(self, padding='10')
+        self.frame.pack(fill='both', expand=True)
+        self.frame.columnconfigure(0, weight=0)  # general options column stays fixed
+        self.frame.columnconfigure(1, weight=0)  # setpoint settings column stays fixed
+        self.frame.rowconfigure(1, weight=1)
 
-            # Subframes (embedded in scrollable Canvases)
-            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            
-        # --File--
-        # (Top left/middle)
-        filefrm = ttk.LabelFrame(pfrm, text='File', padding='10')
-        filefrm.grid(column=0, row=0, columnspan=2, sticky="ew")
-        filefrm.columnconfigure(1, weight=1)
-        filefrm.grid_propagate(False)
-        filefrm.configure(width=800, height=120)
-        self._set_filefrm(filefrm)
-
-        # --General Settings--
-        # (Bottom left)
-
-        stngfrm = ttk.LabelFrame(pfrm, text="Calibration Sequence Options", padding='10')
-        stngfrm.grid(column=0, row=1, sticky="nsew")
-        stngfrm.columnconfigure(1, weight=1)
-        stngfrm.grid_propagate(False)
-        stngfrm.configure(width=400, height=300)
-        
-        stngcanvas = tk.Canvas(stngfrm)
-        stngcanvas.pack(side='left', fill='both', expand=True)
-
-        scrollbar = tk.Scrollbar(stngfrm, orient='vertical', command=stngcanvas.yview)
-        scrollbar.pack(side='right', fill='y')
-
-        stngcanvas.configure(yscrollcommand=scrollbar.set)
-
-        self._scroll_general_settings = tk.Frame(stngcanvas)
-
-        stngcanvas.create_window((0, 0), window=self._scroll_general_settings, anchor='nw')
-        self._scroll_general_settings.bind("<Configure>", lambda e: stngcanvas.configure(scrollregion=stngcanvas.bbox("all")))
-
-        self._set_stngfrm(self._scroll_general_settings)
-
-        # --Setpoint Settings--
-        # (Bottom right)
-
-        spfrm = ttk.LabelFrame(pfrm, text="Setpoints", padding='10')
-        spfrm.grid(column=1, row=1, sticky='nsew')
-        spfrm.columnconfigure(1, weight=1)
-        spfrm.grid_propagate(False)
-        spfrm.configure(width=400, height=300)
-
-        spcanvas = tk.Canvas(spfrm)
-        spcanvas.pack(side='left', fill='both', expand=True)
-
-        scrollbar = tk.Scrollbar(spfrm, orient='vertical', command=spcanvas.yview)
-        scrollbar.pack(side='right', fill='y')
-
-        spcanvas.configure(yscrollcommand=scrollbar.set)
-
-        self._scroll_setpoint_settings = tk.Frame(spcanvas)
-
-        spcanvas.create_window((0, 0), window=self._scroll_setpoint_settings, anchor='nw')
-        self._scroll_setpoint_settings.bind("<Configure>", lambda e: spcanvas.configure(scrollregion=spcanvas.bbox("all")))
-
-        self._set_spfrm(self._scroll_setpoint_settings)
-
-        # --Calibration Run Frame--
-        # (Far top right)
-        runfrm = ttk.Frame(pfrm, padding='10')
-        runfrm.grid(column=2, row=0, sticky='nsew')
-        self._set_runfrm(runfrm)
-
-        # --Console Frame--
-        # (Far bottom right)
-        confrm = ttk.LabelFrame(pfrm, text='Console', padding='10')
-        confrm.grid(column=2, row=1, sticky='ns')
-        self._set_confrm(confrm)
-
-
-        # Command dictionary
-        # ~~~~~~~~~~~~~~~~~~
-
-        self._commands = {
-            'help': self._cmd_help,
-            'status': self._cmd_status,
-            'stop': self._cmd_shutdown,
-            'cls': self._cmd_clear,
-            'echo': self._cmd_echo,
-            'busy': self._cmd_make_busy,
-            'bypass': self._cmd_bypass,
-            'connect': self._cmd_connect,
-            'report': self._cmd_report,
-            'apply': self._set_config_dict,
+        # Subframes (`frames.py` and `cli.py`)
+        self.subframes = {
+            'file': FileFrame(self),
+            'general': GeneralSettingsFrame(self),
+            'setpoints': SetpointSettingsFrame(self),
+            'calibration': CalibrationRunFrame(self),
+            'console': ConsoleFrame(self)
         }
-     
-    # -----------------------------------------------------------------------------------------------------
-
-
-    # Create/refresh subframes
-    # ~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def _set_filefrm(self, filefrm):
-        '''
-        Same thing for the file frame
-        '''
-        # Load config button
-        ttk.Button(filefrm, text='Load Configuration', command=self._load_config, width='20').grid(column=0, row=0)
-        ttk.Label(filefrm, textvariable=self._configpath, anchor="w").grid(column=1, row=0, sticky="ew")
-
-        # Save data button
-        ttk.Button(filefrm, text='Results Directory', command=self._choose_resultspath, width='20').grid(column=0, row=1)
-        ttk.Label(filefrm, textvariable=self._resultspath, anchor="w").grid(column=1, row=1, sticky="ew")
-
-        # Save buttons
-        ttk.Button(filefrm, text='Apply Changes', command=self._set_config_dict).grid(column=0, row=2, sticky='w')
-        ttk.Button(filefrm, text='Save Configuration', command=self._save_config).grid(column=1, row=2, sticky='w')
-
-    def _set_stngfrm(self, frm):
-        '''
-        Sets up all the widgets for user settings in the [general], [customer], [device_info], 
-        and [standard_info] sections of the config. Binds the StringVars to the widgets. This 
-        must be redone if the config dictionary is recreated.
-        '''
-        self._clear_frame(frm)
-
-        # --General--
-
-        d = self._widget_dict['general']
-
-        # Section title
-        ttk.Label(
-            frm, text='General Settings', font=('TkDefaultFont', 10, 'bold')
-        ).pack(fill='x', pady=(0, 5))
-
-        # Setpoint wait
-        self._setting(frm, 'Setpoint wait time [s]: ', 'general', 'setpoint_wait')
-
-        # Sample rate
-        self._setting(frm, 'Sample rate [Hz]: ', 'general', 'sample_rate')
-
-        # Setpoint settle
-        self._setting(frm, 'Setpoint settling time [s]: ', 'general', 'setpoint_settle')
-
-        # Setpoint timeout
-        self._setting(frm, 'Setpoint timeout [s]: ', 'general', 'setpoint_timeout')
-
-        # Number of setpoints
-        self._setting(frm, 'Number of setpoints: ', 'general', 'num_setpoints')
-
-        # Autotune each setpoint
-        row = ttk.Frame(frm)
-        row.pack(fill='x', pady=2)
-        ttk.Label(
-            row, text='Autotune each setpoint? ', width=24, anchor='e'
-        ).pack(side='left')
-        ttk.Checkbutton(
-            row, variable=d['autotune_each'], offvalue='no', onvalue='yes'
-        ).pack(side='left', fill='x', expand=True)
-
-        # Units
-        row = ttk.Frame(frm)
-        row.pack(fill='x', pady=2)
-        ttk.Label(
-            row, text='Pressure units: ', width=24, anchor='e'
-        ).pack(side='left')
-        ttk.Combobox(
-            row, 
-            textvariable=d['unit'], 
-            values=list(UNITS.values()), 
-            state='readonly'
-        ).pack(side='left', fill='x', expand=True)
-
-        btnrow = ttk.Frame(frm)
-        btnrow.pack(fill='x', pady=2)
-        ttk.Button(
-            btnrow, text='Apply Units', command=self._set_unit
-        ).pack(fill='x', pady=(5, 0))
-
-        # --Customer--
-
-        d = self._widget_dict['report']
-
-        # Section title
-        ttk.Label(
-            frm, text='Customer Information', font=('TkDefaultFont', 10, 'bold')
-        ).pack(fill='x', pady=(0, 5))
-
-        # Company name
-        self._setting(frm, 'Company Name: ', 'report', 'company')
-
-        # Project name
-        self._setting(frm, 'Project Name: ', 'report', 'project')
-
-        # Service number
-        self._setting(frm, 'Service Number: ', 'report', 'service_number')
-
-        # Machine name
-        self._setting(frm, 'Machine Name: ', 'report', 'machine')
-
-        # Location
-        self._setting(frm, 'Location: ', 'report', 'location')
-
-        # Date
-        self._setting(frm, 'Date: ', 'report', 'date')
-
-        # Calibration type
-        self._setting(frm, 'Calibration Type: ', 'report', 'calibration_type')
-
-        # Procedure
-        self._setting(frm, 'Procedure: ', 'report', 'procedure')
-
-        # Calibration
-        self._setting(frm, 'Calibration: ', 'report', 'calibration')
-
-    def _set_spfrm(self, frm):
-        '''
-        Sets up the widgets in the setpoint frame.
-        '''
-        self._clear_frame(frm)
-  
-        num_setpoints = self.config.getg('num_setpoints', cast=int)
-
-        for i in range(num_setpoints):
-
-            # Section title
-            ttk.Label(
-                frm, text=f'Setpoint {i+1}', font=('TkDefaultFont', 10, 'bold')
-            ).pack(fill='x', pady=(0, 5))
-
-            # Setpoint pressure
-            self._setting(
-                frm,
-                f'Setpoint pressure [{self.config.getg("unit", cast=str)}]: ',
-                f'setpoint.{i+1}',
-                'pressure',
-                extra_wide=True
-            )
-
-            # Setpoint error tolerance
-            self._setting(
-                frm,
-                f'Setpoint error tolerance [{self.config.getg("unit", cast=str)}]: ',
-                f'setpoint.{i+1}',
-                'max_err',
-                extra_wide=True
-            )
-
-    def _set_runfrm(self, frm):
-        '''
-        Instantiates the _progressbar local attribute which can be 
-        started/stopped to indicate that a calibration sequence is in progress. 
-        '''
-        ttk.Button(
-            frm, text='Run\nCalibration\nSequence', command=self._cal
-        ).grid(column=0, row=0, rowspan=2, padx=10, sticky='ns')
-
-        ttk.Label(frm, textvariable=self._statusvar).grid(column=1, row=0)
-        self._progressbar = ttk.Progressbar(frm, orient='horizontal', mode='indeterminate', length=350)
-        self._progressbar.grid(column=1, row=1, pady=5, padx=10)
-
-    def _set_confrm(self, frm):
-        '''
-        Instantiates the local attributes _console and _entry to be 
-        used when handling/displaying command entries.
-        '''
-        self._console = ScrolledText(frm, font=('Consolas', 11), height=12)
-        self._console.pack(fill='both', expand=True)
-        self._console.insert(tk.END, 'Application started.\n')
-        self._console.config(state='disabled') # Stop the user from writing in the console window.
-
-        entrybox = tk.Frame(frm)
-        entrybox.pack(fill='x')
-
-        tk.Label(entrybox, text='>', font=('Consolas', 11)).pack(side='left', padx=(5,2))
-        self._entry = tk.Entry(entrybox, font=('Consolas', 11))
-        self._entry.pack(side='left', fill='x', expand=True, padx=(0,5))
-        self._entry.bind("<Return>", self._execute)
-
-    def _setting(self, frm, setting_name, ini_section, ini_key, extra_wide=False):
-        '''
-        To be used in the above methods. Creates and packs a new setting to the table.
-        Only used for generic string entry type settings. The rest you gotta do yourself.
-        '''
-        if extra_wide:
-            w = 34
-        else:
-            w = 24
-        row = ttk.Frame(frm)
-        row.pack(fill='x', pady=2)
-        ttk.Label(
-            row, text=setting_name, width=w, anchor='e'
-        ).pack(side='left')
-        ttk.Entry(
-            row, textvariable=self._widget_dict[ini_section][ini_key]
-        ).pack(side='left', fill='x', expand=True)
-
-    def _clear_frame(self, frm):
-        for child in frm.winfo_children():
-            child.destroy()
 
     # --------------------------------------------------------------------------------------------------------------------------------
 
 
-    # load/apply/retrieve/edit configuration settings
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Configuration
+    # ~~~~~~~~~~~~~
 
-    def _set_unit(self):
-        '''
-        Updates the configuration to match the user-inputted unit.
-        If the user clicks "Apply Units" in the GUI, this function is called. 
-        It updates the config to match the new unit, and also converts all 
-        setpoint pressures and tolerances to the new units.
-
-        If the user instead clicks "Apply Changes" at the top, the unit will be changed,
-        but all values are assumed to be in the new units, and no conversion is done. 
-        This is because the user may have manually changed the setpoint values to match 
-        the new units, and we don't want to convert them again.
-        '''
-        # Stow the old unit before applying all changes (this way it's remembered for the conversion after).
-        old_unit = self.config.getg('unit', cast=str)
-
-        # Stow the new unit (which will be applied to the config after this)
-        new_unit = self._widget_dict['general']['unit'].get()
-
-        # Apply any other changes the user has made since last applying changes. 
-        # This is done so that the unit change is applied to the most recent values 
-        # of the setpoints, not the last saved values.
-        self._set_config_dict()
-
-        # Convert the newly applied values according to the new unit.
-        # Nothing's stopping the .units method from working if the current
-        # unit in the config is the same as the new unit (it still works to convert
-        # the pressure values)
-        self.config.units(new_unit, old_unit=old_unit)
-
-        # Retrieve the newly converted values and update the GUI to match.
-        self._get_config_dict() # Refresh the widget dictionary to match the new config.
-        self._set_stngfrm(self._scroll_general_settings) # Refresh the general settings frame to match the new config.
-        self._set_spfrm(self._scroll_setpoint_settings) # Refresh the setpoint settings frame to match the new config.
-
-        # Set the units on the PLC.
-        self.plc.set_units(new_unit)
-
-    def _get_config_dict(self):
+    def config_to_widgets(self):
         '''
         Copies the config dict to a dict made up of stringvars.
 
@@ -437,9 +117,9 @@ class GUI(tk.Tk):
                 setting: tk.StringVar(value=val)
                 for setting, val in config_dict[section].items()
             }
-        self._widget_dict = widget_dict
+        self.widget_dict = widget_dict
 
-    def _set_config_dict(self, args=None):
+    def widgets_to_config(self, args=None):
         '''
         Activates when the "Apply Changes" button is pressed.
         Takes the widget dict attribute of the gui class, which may have been edited
@@ -455,7 +135,7 @@ class GUI(tk.Tk):
 
         **This docstring may not be up-to-date but I'm too lazy to rewrite it.
         '''
-        widget_dict = self._widget_dict
+        widget_dict = self.widget_dict
         config_dict = {}
         for section in widget_dict:
             config_dict[section] = {
@@ -475,16 +155,51 @@ class GUI(tk.Tk):
         # Apply the new dictionary to the config
         self.config.set_dict(config_dict)
         # Reset the widget dictionary using these new values
-        self._get_config_dict()
+        self.config_to_widgets()
         # Refresh the settings windows
-        self._set_stngfrm(self._scroll_general_settings)
-        self._set_spfrm(self._scroll_setpoint_settings)
+        self._refresh_widgets()
 
         # Set the units on the PLC.
         if self.plc.connected:
             self.plc.set_units(self.config.getg('unit', cast=str))
 
-    def _load_config(self):
+    def set_unit(self):
+        '''
+        Updates the configuration to match the user-inputted unit.
+        If the user clicks "Apply Units" in the GUI, this function is called. 
+        It updates the config to match the new unit, and also converts all 
+        setpoint pressures and tolerances to the new units.
+
+        If the user instead clicks "Apply Changes" at the top, the unit will be changed,
+        but all values are assumed to be in the new units, and no conversion is done. 
+        This is because the user may have manually changed the setpoint values to match 
+        the new units, and we don't want to convert them again.
+        '''
+        # Stow the old unit before applying all changes (this way it's remembered for the conversion after).
+        old_unit = self.config.getg('unit', cast=str)
+
+        # Stow the new unit (which will be applied to the config after this)
+        new_unit = self.widget_dict['general']['unit'].get()
+
+        # Apply any other changes the user has made since last applying changes. 
+        # This is done so that the unit change is applied to the most recent values 
+        # of the setpoints, not the last saved values.
+        self.widgets_to_config()
+
+        # Convert the newly applied values according to the new unit.
+        # Nothing's stopping the .units method from working if the current
+        # unit in the config is the same as the new unit (it still works to convert
+        # the pressure values)
+        self.config.units(new_unit, old_unit=old_unit)
+
+        # Retrieve the newly converted values and update the GUI to match.
+        self.config_to_widgets() # Refresh the widget dictionary to match the new config.
+        self._refresh_widgets()
+
+        # Set the units on the PLC.
+        self.plc.set_units(new_unit)
+
+    def load_config(self):
         '''
         Activates when the "Load Configuration" button is pressed. 
         Loads an existing configuration. This can also be done when executing the program (see main.py)
@@ -504,12 +219,11 @@ class GUI(tk.Tk):
         if load_path.endswith('.ini'):
             self.config.load(load_path) # Error handling done here
             self.log(f'[STATUS] Opened configuration file {load_path}')
-            self._configpath.set(load_path)
+            self.configpath.set(load_path)
             # reset the settings dictionaries using the new config
-            self._get_config_dict()
+            self.config_to_widgets()
             # Refresh the settings windows
-            self._set_stngfrm(self._scroll_general_settings)
-            self._set_spfrm(self._scroll_setpoint_settings)
+            self._refresh_widgets()
 
             # Set the units on the PLC
             self.plc.set_units(self.config.getg('unit', cast=str))
@@ -517,12 +231,12 @@ class GUI(tk.Tk):
         else: # Don't do anything if the user picks a bad path
             return
 
-    def _save_config(self):
+    def save_config(self):
         '''
         Saves a config that has been edited in the GUI.
         '''
         # Apply changes
-        self._set_config_dict()
+        self.widgets_to_config()
         # Save the configuration
         save_path = filedialog.asksaveasfilename(
             defaultextension='.ini',
@@ -534,8 +248,16 @@ class GUI(tk.Tk):
             self.log('[WARNING] Configuration file not saved as .ini. Cancelling...')
         else:
             self.config.save(save_path)
-            self._configpath.set(save_path)
+            self.configpath.set(save_path)
             self.log('[STATUS] Configuration saved.')
+
+    def _refresh_widgets(self):
+        '''
+        Re-creates the settings subframes to match a new config.
+        Also re-ties each entry widget to its StringVar.
+        '''
+        self.subframes['general'].refresh()
+        self.subframes['setpoints'].refresh()
 
     # -----------------------------------------------------------------------------------------------------------------------
 
@@ -543,14 +265,14 @@ class GUI(tk.Tk):
     # Calibration sequence
     # ~~~~~~~~~~~~~~~~~~~~
 
-    def _choose_resultspath(self):
+    def choose_resultspath(self):
             save_path = filedialog.asksaveasfilename(
                 defaultextension=".csv",
                 filetypes = [("comma-separated value file", "*.csv"), ("Excel file", "*.xlsx")]
             )
-            self._resultspath.set(save_path)
+            self.resultspath.set(save_path)
     
-    def _cal(self):
+    def cal(self):
         '''
         Opens up a worker thread which performs a calibration sequence.
         When the calibration sequence is finished, activates callback function.
@@ -559,15 +281,15 @@ class GUI(tk.Tk):
         '''
         def callback():
             self.is_busy = False
-            self._progressbar.stop()
-            self.log(f'[STATUS] Calibration data saved to {self._resultspath.get()}')
+            self.subframes['calibration'].stop_anim()
+            self.log(f'[STATUS] Calibration data saved to {self.resultspath.get()}')
 
         def worker():
             try:
                 cal_seq = CalibrationSequence(
                     self.plc,
                     self.config,
-                    self._widget_dict['general']['unit'].get(),
+                    self.widget_dict['general']['unit'].get(),
                     self.log_from_thread
                 )
 
@@ -594,7 +316,7 @@ class GUI(tk.Tk):
             self.log('[STATUS] Calibration already in progress.')
             return
         
-        save_path = self._resultspath.get()
+        save_path = self.resultspath.get()
         save_dir, save_filename = os.path.split(save_path)
         save_dir = save_dir or '.' # If the directory is the current directory.
 
@@ -612,7 +334,7 @@ class GUI(tk.Tk):
 
         # Start the calibration
         self.is_busy = True
-        self._progressbar.start()
+        self.subframes['calibration'].start_anim()
         threading.Thread(
             target=worker,
             daemon=True
@@ -622,7 +344,7 @@ class GUI(tk.Tk):
         '''
         Saves the results.
         '''
-        save_path = self._resultspath.get()
+        save_path = self.resultspath.get()
 
         if save_path.endswith(".csv"):
             results.to_csv(save_path, index=False)
@@ -632,17 +354,14 @@ class GUI(tk.Tk):
     # -------------------------------------------------------------------------------------------------------------------------
 
 
-    # Embedded cli commands
-    # ~~~~~~~~~~~~~~~~~~~~~
+    # Commands and utility
+    # ~~~~~~~~~~~~~~~~~~~~
     
     def log(self, msg):
         '''
-        Sends a message to the console window.
+        Logs to the console.
         '''
-        self._console.config(state='normal')
-        self._console.insert(tk.END, str(msg)+'\n')
-        self._console.see(tk.END)
-        self._console.config(state='disabled')
+        self.subframes['console'].log(msg)
 
     def log_from_thread(self, msg):
         '''
@@ -650,23 +369,7 @@ class GUI(tk.Tk):
         '''
         self.after(0, lambda: self.log(str(msg)))
 
-    def _execute(self, event=None):
-        raw = self._entry.get()
-        if not raw:
-            return
-        self._entry.delete(0, tk.END)
-
-        command, *args = raw.split(' ')
-
-        self.log(f'>{raw}')
-
-        cmd_func = self._commands.get(command)
-        if cmd_func:
-            cmd_func(args)
-        else:
-            self.log('[WARNING] Unknown command.')
-
-    def _cmd_shutdown(self, args=None):
+    def shutdown(self, args=None):
         '''
         Safely closes the program. Activated either by the red X in the GUI
         or the `stop` command in the CLI.
@@ -685,19 +388,13 @@ class GUI(tk.Tk):
         self.plc.close()
         self.quit()
         self.destroy()
-    
-    def _cmd_clear(self, args=None):
-        '''
-        Clears the console window.
-        '''
-        self._console.config(state='normal')
-        self._console.delete('1.0', tk.END)
-        self._console.config(state='disabled')
 
-    def _cmd_status(self, args=None):
+    def status(self, args=None):
         '''
         Shows active pressure units.
         Reads pressure sensor input registers.
+
+        command: status
         '''
         if self.plc.connected:
             self.log(f'System using pressure units: {self.config.getg('unit', cast=str)}')
@@ -708,39 +405,32 @@ class GUI(tk.Tk):
         else:
             self.log('Offline.')
 
-    def _cmd_bypass(self, args=None):
+    def bypass(self, args=None):
         '''
         Bypasses the startup sequence in UniLogic.
+
+        command: bypass
         '''
         if self.plc.connected:
             self.plc.write_coil(ADDRESSES['bypass_startup'], value=True)
 
-    def _cmd_help(self, args=None):
-        '''
-        Lists available commands in the embedded CLI.
-        '''
-        self.log('Available commands:')
-        for cmd in self._commands.keys():
-            self.log(f'  {cmd}')
 
-    def _cmd_echo(self, args):
-        '''
-        Echoes the input arguments back to the console.
-        '''
-        self.log(' '.join(args))
-
-    def _cmd_make_busy(self, args=None):
+    def make_busy(self, args=None):
         '''
         For testing purposes
+
+        command: make_busy
         '''
         if self.is_busy:
             self.is_busy = False
         else:
             self.is_busy = True
 
-    def _cmd_connect(self, args=None):
+    def connect(self, args=None):
         '''
         Connect to PLC
+
+        command: connect
         '''
         try:
             self.plc.connect()
@@ -750,9 +440,11 @@ class GUI(tk.Tk):
         except Exception as e:
             self.log(f'Error: {e}. Check PLC IP address and network connection.')
 
-    def _cmd_report(self, args):
+    def report(self, args):
         '''
         Saves a report with artificial setpoint data.
+
+        command: report
 
         :args[0]: path to save results at.
         '''

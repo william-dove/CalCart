@@ -6,6 +6,7 @@ class Setting:
     key: str
     label: str
     default: str = ''
+    widget_type: str = 'entry'
     report_cell: str = None
 
 
@@ -48,12 +49,14 @@ SETTINGS = [
         key="autotune_each",
         label="Autotune each setpoint?",
         default="no",
+        widget_type='checkbutton',
     ),
     Setting(
         section="general",
         key="unit",
         label="Pressure units",
         default="Torr",
+        widget_type='combobox'
     ),
 
     # --------------------
