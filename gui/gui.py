@@ -84,8 +84,8 @@ class GUI(tk.Tk):
         pfrm.columnconfigure(1, weight=0)  # setpoint settings column stays fixed
         pfrm.rowconfigure(1, weight=1)
 
-            # Subframes
-            # ~~~~~~~~~
+            # Subframes (embedded in scrollable Canvases)
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             
         # --File--
         # (Top left/middle)
@@ -98,21 +98,51 @@ class GUI(tk.Tk):
 
         # --General Settings--
         # (Bottom left)
-        self._stngfrm = ttk.LabelFrame(pfrm, text="Calibration Sequence Options", padding='10')
-        self._stngfrm.grid(column=0, row=1, sticky="nsew")
-        self._stngfrm.columnconfigure(1, weight=1)
-        self._stngfrm.grid_propagate(False)
-        self._stngfrm.configure(width=400, height=300)
-        self._set_stngfrm(self._stngfrm)
+
+        stngfrm = ttk.LabelFrame(pfrm, text="Calibration Sequence Options", padding='10')
+        stngfrm.grid(column=0, row=1, sticky="nsew")
+        stngfrm.columnconfigure(1, weight=1)
+        stngfrm.grid_propagate(False)
+        stngfrm.configure(width=400, height=300)
+        
+        stngcanvas = tk.Canvas(stngfrm)
+        stngcanvas.pack(side='left', fill='both', expand=True)
+
+        scrollbar = tk.Scrollbar(stngfrm, orient='vertical', command=stngcanvas.yview)
+        scrollbar.pack(side='right', fill='y')
+
+        stngcanvas.configure(yscrollcommand=scrollbar.set)
+
+        self._scroll_general_settings = tk.Frame(stngcanvas)
+
+        stngcanvas.create_window((0, 0), window=self._scroll_general_settings, anchor='nw')
+        self._scroll_general_settings.bind("<Configure>", lambda e: stngcanvas.configure(scrollregion=stngcanvas.bbox("all")))
+
+        self._set_stngfrm(self._scroll_general_settings)
 
         # --Setpoint Settings--
         # (Bottom right)
-        self._spfrm = ttk.LabelFrame(pfrm, text="Setpoints", padding='10')
-        self._spfrm.grid(column=1, row=1, sticky='nsew')
-        self._spfrm.columnconfigure(1, weight=1)
-        self._spfrm.grid_propagate(False)
-        self._spfrm.configure(width=400, height=300)
-        self._set_spfrm(self._spfrm)
+
+        spfrm = ttk.LabelFrame(pfrm, text="Setpoints", padding='10')
+        spfrm.grid(column=1, row=1, sticky='nsew')
+        spfrm.columnconfigure(1, weight=1)
+        spfrm.grid_propagate(False)
+        spfrm.configure(width=400, height=300)
+
+        spcanvas = tk.Canvas(spfrm)
+        spcanvas.pack(side='left', fill='both', expand=True)
+
+        scrollbar = tk.Scrollbar(spfrm, orient='vertical', command=spcanvas.yview)
+        scrollbar.pack(side='right', fill='y')
+
+        spcanvas.configure(yscrollcommand=scrollbar.set)
+
+        self._scroll_setpoint_settings = tk.Frame(spcanvas)
+
+        spcanvas.create_window((0, 0), window=self._scroll_setpoint_settings, anchor='nw')
+        self._scroll_setpoint_settings.bind("<Configure>", lambda e: spcanvas.configure(scrollregion=spcanvas.bbox("all")))
+
+        self._set_spfrm(self._scroll_setpoint_settings)
 
         # --Calibration Run Frame--
         # (Far top right)
@@ -264,8 +294,7 @@ class GUI(tk.Tk):
 
     def _set_spfrm(self, frm):
         '''
-        In the future, I will make the `self._spfrm` frame into a canvas, in order to add scrolling if too many 
-        setpoints are added to display at once on the screen.
+        Sets up the widgets in the setpoint frame.
         '''
         self._clear_frame(frm)
   
@@ -386,8 +415,8 @@ class GUI(tk.Tk):
 
         # Retrieve the newly converted values and update the GUI to match.
         self._get_config_dict() # Refresh the widget dictionary to match the new config.
-        self._set_stngfrm(self._stngfrm) # Refresh the general settings frame to match the new config.
-        self._set_spfrm(self._spfrm) # Refresh the setpoint settings frame to match the new config.
+        self._set_stngfrm(self._scroll_general_settings) # Refresh the general settings frame to match the new config.
+        self._set_spfrm(self._scroll_setpoint_settings) # Refresh the setpoint settings frame to match the new config.
 
         # Set the units on the PLC.
         self.plc.set_units(new_unit)
@@ -448,8 +477,8 @@ class GUI(tk.Tk):
         # Reset the widget dictionary using these new values
         self._get_config_dict()
         # Refresh the settings windows
-        self._set_stngfrm(self._stngfrm)
-        self._set_spfrm(self._spfrm)
+        self._set_stngfrm(self._scroll_general_settings)
+        self._set_spfrm(self._scroll_setpoint_settings)
 
         # Set the units on the PLC.
         if self.plc.connected:
@@ -479,8 +508,8 @@ class GUI(tk.Tk):
             # reset the settings dictionaries using the new config
             self._get_config_dict()
             # Refresh the settings windows
-            self._set_stngfrm(self._stngfrm)
-            self._set_spfrm(self._spfrm)
+            self._set_stngfrm(self._scroll_general_settings)
+            self._set_spfrm(self._scroll_setpoint_settings)
 
             # Set the units on the PLC
             self.plc.set_units(self.config.getg('unit', cast=str))
