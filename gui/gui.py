@@ -46,7 +46,7 @@ class GUI(tk.Tk):
         # Initialize things
         # ~~~~~~~~~~~~~~~~~
 
-        super().__init__() # Initialize the parent class (Tkinter root)
+        super().__init__() # Initialize the parent class (Tkinter root window)
 
         # Setup gui window
         self.title("CalCart 2025 IMA Life North America")
