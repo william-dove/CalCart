@@ -2,7 +2,7 @@
 
 # Local
 from config.settings import SETTINGS
-from utils.constants import UNITS
+from utils.constants import UNITS, STANDARDS
 
 # Other
 import tkinter as tk
@@ -11,6 +11,28 @@ from tkinter import ttk
 def clear(frm):
     for child in frm.winfo_children():
         child.destroy()
+
+def make_mousewheel_scrollable(canvas):
+    '''
+    Allows the mouse wheel to scroll the settings frames.
+    '''
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _bind(event):
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>",
+                        lambda e: canvas.yview_scroll(-1, "units"))
+        canvas.bind_all("<Button-5>",
+                        lambda e: canvas.yview_scroll(1, "units"))
+
+    def _unbind(event):
+        canvas.unbind_all("<MouseWheel>")
+        canvas.unbind_all("<Button-4>")
+        canvas.unbind_all("<Button-5>")
+
+    canvas.bind("<Enter>", _bind)
+    canvas.bind("<Leave>", _unbind)
 
 
 class FileFrame(ttk.LabelFrame):
@@ -84,6 +106,8 @@ class GeneralSettingsFrame(ttk.LabelFrame):
 
         canvas.configure(yscrollcommand=scrollbar.set)
 
+        make_mousewheel_scrollable(canvas)
+
         self.scrollable = tk.Frame(canvas)
 
         canvas.create_window((0, 0), window=self.scrollable, anchor='nw')
@@ -100,7 +124,9 @@ class GeneralSettingsFrame(ttk.LabelFrame):
         '''
         clear(self.scrollable)
 
-        # --General--
+        # --------------------
+        # [general]
+        # --------------------
 
         d = self.root.widget_dict['general']
 
@@ -109,19 +135,13 @@ class GeneralSettingsFrame(ttk.LabelFrame):
             self.scrollable, text='General Settings', font=('TkDefaultFont', 10, 'bold')
         ).pack(fill='x', pady=(0, 5))
 
-        for s in SETTINGS:
-            if s.section == 'general' and s.widget_type == 'entry':
+        for s in [s for s in SETTINGS if s.section == 'general']:
+            if s.widget_type == 'entry':
                 self._entry(s.label, s.section, s.key)
+            elif s.widget_type == 'checkbutton':
+                self._checkbutton(s.label, s.section, s.key)
 
-        # Autotune each setpoint
-        row = ttk.Frame(self.scrollable)
-        row.pack(fill='x', pady=2)
-        ttk.Label(
-            row, text='Autotune each setpoint? ', width=24, anchor='e'
-        ).pack(side='left')
-        ttk.Checkbutton(
-            row, variable=d['autotune_each'], offvalue='no', onvalue='yes'
-        ).pack(side='left', fill='x', expand=True)
+        
 
         # Units
         row = ttk.Frame(self.scrollable)
@@ -142,9 +162,9 @@ class GeneralSettingsFrame(ttk.LabelFrame):
             btnrow, text='Apply Units', command=self.root.set_unit
         ).pack(fill='x', pady=(5, 0))
 
-        # --Customer--
-
-        d = self.root.widget_dict['report']
+        # --------------------
+        # [report.header]
+        # --------------------
 
         # Section title
         ttk.Label(
@@ -152,8 +172,58 @@ class GeneralSettingsFrame(ttk.LabelFrame):
         ).pack(fill='x', pady=(0, 5))
 
         for s in SETTINGS:
-            if s.section == 'report' and s.widget_type == 'entry':
+            if s.section == 'report.header' and s.widget_type == 'entry':
                 self._entry(s.label, s.section, s.key)
+
+        # --------------------
+        # [report.device]
+        # --------------------
+
+        # Section title
+        ttk.Label(
+            self.scrollable, text='Customer Device (UUT) Information', font=('TkDefaultFont', 10, 'bold')
+        ).pack(fill='x', pady=(0, 5))
+
+        for s in SETTINGS:
+            if s.section == 'report.device' and s.widget_type == 'entry':
+                self._entry(s.label, s.section, s.key)
+
+        # --------------------
+        # [report.standard]
+        # --------------------
+
+        d = self.root.widget_dict['report.standard']
+
+        # Section title
+        ttk.Label(
+            self.scrollable, text='Standard/Reference Information', font=('TkDefaultFont', 10, 'bold')
+        ).pack(fill='x', pady=(0, 5))
+
+        # Standard presets
+        row = ttk.Frame(self.scrollable)
+        row.pack(fill='x', pady=2)
+        ttk.Label(
+            row, text='Standard Preset', width=24, anchor='e'
+        ).pack(side='left')
+        ttk.Combobox(
+            row, 
+            textvariable=d['preset'], 
+            values=list(STANDARDS.keys()), 
+            state='readonly'
+        ).pack(side='left', fill='x', expand=True)
+
+        btnrow = ttk.Frame(self.scrollable)
+        btnrow.pack(fill='x', pady=2)
+        ttk.Button(
+            btnrow, text='Apply Preset', command=self.root.set_standard_preset
+        ).pack(fill='x', pady=(5, 0))
+
+        # Other info
+        for s in SETTINGS:
+            if s.section == 'report.standard' and s.widget_type == 'entry':
+                self._entry(s.label, s.section, s.key)
+
+
 
     def _entry(self, label, ini_section, ini_key):
         '''
@@ -167,7 +237,24 @@ class GeneralSettingsFrame(ttk.LabelFrame):
             row, text=label, width=w, anchor='e'
         ).pack(side='left')
         ttk.Entry(
-            row, textvariable=self.root.widget_dict[ini_section][ini_key]
+            row, 
+            textvariable=self.root.widget_dict[ini_section][ini_key]
+        ).pack(side='left', fill='x', expand=True)
+
+    def _checkbutton(self, label, ini_section, ini_key):
+        '''
+        Same thing as above but for yes/no check mark settings
+        '''
+        row = ttk.Frame(self.scrollable)
+        row.pack(fill='x', pady=2)
+        ttk.Label(
+            row, text=label, width=24, anchor='e'
+        ).pack(side='left')
+        ttk.Checkbutton(
+            row, 
+            variable=self.root.widget_dict[ini_section][ini_key], 
+            offvalue='no', 
+            onvalue='yes'
         ).pack(side='left', fill='x', expand=True)
 
 class SetpointSettingsFrame(ttk.LabelFrame):
@@ -196,6 +283,8 @@ class SetpointSettingsFrame(ttk.LabelFrame):
         scrollbar.pack(side='right', fill='y')
 
         canvas.configure(yscrollcommand=scrollbar.set)
+
+        make_mousewheel_scrollable(canvas)
 
         self.scrollable = tk.Frame(canvas)
 

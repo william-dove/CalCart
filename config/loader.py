@@ -24,17 +24,21 @@ class ConfigLoader:
                 actually be read/overwritten in that respective section.
             - (See utils.constants for the description of each setting and its default value).
         '''
-        self.config = configparser.ConfigParser()
+        self.config = configparser.ConfigParser(interpolation=None)
         self.path = None
 
         for s in SETTINGS:
             if s.default is not None:
                 self.config['DEFAULT'][s.key] = s.default
+
         
         # Initialize sections of the INI (each section inherits values from DEFAULT)
         self.config.add_section('general') 
         self.config.add_section('setpoint.1') 
-        self.config.add_section('report')
+        # Report sections
+        self.config.add_section('report.header')
+        self.config.add_section('report.device')
+        self.config.add_section('report.standard')
     
     # -----------------------------------------------------------------------------------------------------------------------------
 
@@ -69,8 +73,8 @@ class ConfigLoader:
         Returns a nested dictionary of the configuration.
         '''
         return {
-            section: dict(self.config[section])
-            for section in self.config
+            ini_section: dict(self.config[ini_section])
+            for ini_section in self.config
         }
     
     def set_dict(self, config_dict):

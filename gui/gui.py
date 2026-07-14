@@ -9,7 +9,7 @@ from gui.frames import (
 )
 from gui.cli import ConsoleFrame
 from calibration.calibration import CalibrationSequence
-from utils.constants import ADDRESSES
+from utils.constants import ADDRESSES, STANDARDS
 
 # Other
 import tkinter as tk
@@ -18,6 +18,8 @@ from tkinter import ttk
 
 import threading
 import os
+import queue
+from tkinter import simpledialog
 
 
 class GUI(tk.Tk):
@@ -112,12 +114,13 @@ class GUI(tk.Tk):
         '''
         config_dict = self.config.get_dict()
         widget_dict = {}
-        for section in config_dict:
-            widget_dict[section] = {
-                setting: tk.StringVar(value=val)
-                for setting, val in config_dict[section].items()
+        for ini_section in config_dict:
+            widget_dict[ini_section] = {
+                ini_key: tk.StringVar(value=ini_val)
+                for ini_key, ini_val in config_dict[ini_section].items()
             }
         self.widget_dict = widget_dict
+
 
     def widgets_to_config(self, args=None):
         '''
@@ -159,9 +162,12 @@ class GUI(tk.Tk):
         # Refresh the settings windows
         self._refresh_widgets()
 
+        self.log('[STATUS] Applied changes to configuration.')
+
         # Set the units on the PLC.
         if self.plc.connected:
             self.plc.set_units(self.config.getg('unit', cast=str))
+        
 
     def set_unit(self):
         '''
@@ -198,6 +204,33 @@ class GUI(tk.Tk):
 
         # Set the units on the PLC.
         self.plc.set_units(new_unit)
+
+    def set_standard_preset(self):
+        '''
+        Changes the settings under the "Standard/Reference Information" section of the options
+        to match those of a selected preset in the dropdown menu above the button. If "Custom" 
+        is selected from the dropdown, no change occurs.
+        '''
+        preset = self.widget_dict['report.standard']['preset'].get()
+
+        if preset == '<select>':
+            return
+        if preset not in STANDARDS:
+            return
+        
+        self.widgets_to_config() # Apply other changes to settings.
+
+        path = os.path.join('./config/standards', STANDARDS[preset])
+
+        try:
+            self.config.load(path) # Overwrites the [report.standard] section of the INI, everything else defaults to the last loaded INI.
+            self.log(f'[STATUS] Using the following standard for calibration: {preset}')
+        except Exception as e:
+            self.log(f'[ERROR] {e}')
+
+        self.config_to_widgets()
+        self.subframes['general'].refresh()
+        
 
     def load_config(self):
         '''
@@ -271,6 +304,30 @@ class GUI(tk.Tk):
                 filetypes = [("comma-separated value file", "*.csv"), ("Excel file", "*.xlsx")]
             )
             self.resultspath.set(save_path)
+
+    def prompt_from_thread(self, prompt):
+        '''
+        Opens a Tkinter popup from the main GUI thread, and returns the entered value
+        on the thread the function was called. This is used as a callback function in the
+        worker thread opened during calibration.
+        '''
+        results = queue.Queue()
+
+        def ask():
+            try:
+                value = simpledialog.askfloat(
+                    title='Enter UUT pressure',
+                    prompt=prompt,
+                    parent=self,
+                    minvalue=0.0,
+                )
+            except Exception:
+                value = None
+            results.put(value)
+
+        self.after(0, ask)
+
+        return results.get()
     
     def cal(self):
         '''
@@ -282,23 +339,24 @@ class GUI(tk.Tk):
         def callback():
             self.is_busy = False
             self.subframes['calibration'].stop_anim()
-            self.log(f'[STATUS] Calibration data saved to {self.resultspath.get()}')
 
         def worker():
             try:
                 cal_seq = CalibrationSequence(
                     self.plc,
                     self.config,
-                    self.widget_dict['general']['unit'].get(),
-                    self.log_from_thread
+                    self.log_from_thread,
+                    self.prompt_from_thread,
                 )
 
                 results = cal_seq.run()
 
                 self._save_results(results)
+                self.log(f'[STATUS] Calibration data saved to {self.resultspath.get()}')
 
             except Exception as e:
                 self.log_from_thread(f"[ERROR] {e}")
+                raise
 
             finally: 
                 # When the worker is finished (i.e. calibration sequence complete), the
@@ -321,15 +379,15 @@ class GUI(tk.Tk):
         save_dir = save_dir or '.' # If the directory is the current directory.
 
         if not save_path or save_path.startswith("<---"):
-            self.log('[WARNING] No save path selected.')
+            self.log('[WARNING] No save path selected, cancelling operation.')
             return
         
         if not save_filename.endswith(('.csv', '.xlsx')):
-            self.log('[WARNING] Invalid save file format. Please select a .csv or .xlsx file.')
+            self.log('[WARNING] Invalid save file format, cancelling. Please select a .csv or .xlsx file.')
             return
         
         if not os.path.isdir(save_dir):
-            self.log('[WARNING] Invalid save directory.')
+            self.log('[WARNING] Invalid save directory, cancelling operation.')
             return
 
         # Start the calibration
@@ -347,9 +405,9 @@ class GUI(tk.Tk):
         save_path = self.resultspath.get()
 
         if save_path.endswith(".csv"):
-            results.to_csv(save_path, index=False)
+            results.to_csv(save_path, index=True)
         elif save_path.endswith(".xlsx"):
-            results.to_excel(save_path, index=False)
+            results.to_excel(save_path, index=True)
 
     # -------------------------------------------------------------------------------------------------------------------------
 

@@ -1,6 +1,7 @@
 #calibration/calibration.py
 import time
 import pandas as pd
+import numpy as np
 import xlwings as xw
 from utils.constants import ADDRESSES
 from config.settings import SETTINGS
@@ -18,11 +19,13 @@ class CalibrationSequence:
     :param addresses: dict of Modbus addresses assigned by PLC
     :param log_callback: callable used to emit status messages in the Tk main thread.
     '''
-    def __init__(self, plc, config, log_callback):
+    def __init__(self, plc, config, log_callback, prompt_callback=None):
         '''
         Initialize object references.
             - `log_callback` is a method of the `GUI` class, which is called here
                 to print updates to the console during calibration.
+            - `prompt_callback` allows the GUI to provide a pressure input dialog
+                from the Tk main thread when manual UUT entry is enabled.
 
         Determine units from config.
         '''
@@ -30,6 +33,7 @@ class CalibrationSequence:
         self.config = config
         self.ad = ADDRESSES # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
         self.log = log_callback
+        self.prompt = prompt_callback
 
         self.unit = self.config.getg('unit', cast=str)
 
@@ -40,27 +44,54 @@ class CalibrationSequence:
         :return: dataframe containing results of calibration sequence.
         '''
         self.log('[STATUS] Starting calibration...')
+
         setpoints = self.config.get_setpoints() # list of tuples of form (<setpoint pressure>, <setpoint error tolerance>)
-        times, cal, uut = [], [], [] # Initialize lists for storing results
+
+        columns = ['setpoint', 'setpoint pressure', 'setpoint max error', 'reference/standard pressure']
+        if self.config.getgbool('uut_signal'):
+            columns.append('uut signal [V]')
+        if self.config.getgbool('manual_entry'):
+            for n in range(self.config.getg('num_test_units', cast=int)):
+                columns.append(f'uut {n+1}')
+
+        df = pd.DataFrame(columns=columns)
+        df.set_index('setpoint', inplace=True)
 
         # Build results list
-        for sp, max_err in setpoints:
-            self._apply_setpoint(sp)
+        for i, sp in enumerate(setpoints):
+            i+=1 # Setpoints start counting at 1
+            pressure, max_err = sp
+
+            # Keep track of setpoint info
+            df.loc[i, 'setpoint pressure'] = pressure
+            df.loc[i, 'setpoint max error'] = max_err
+
+            self._prep_setpoint(pressure)
+
             if self.config.getgbool('autotune_each'):
                 self._autotune()
             else:
                 self._check_autotune()
-            settled = self._set_pressure(sp, max_err)
-            if settled:
-                times, cal, uut = self._record_data(times, cal, uut)
-                self.log(f'[STATUS] Finished recording for setpoint ({sp} {self.unit}).')
-            else:
+
+            settled = self._set_pressure(pressure, max_err)
+            if not settled:
                 self.log(f'[STATUS] Skipping setpoint ({sp} {self.unit})')
                 continue
-        
+
+            if self.config.getgbool('manual_entry'):
+                values = self._get_user_input()
+                for n in range(self.config.getg('num_test_units', cast=int)):
+                    df.loc[i, f'uut {n+1}'] = values[n]
+            
+            ref_pressure, uut_signal = self._record()
+            df.loc[i, 'reference/standard pressure'] = ref_pressure
+            if self.config.getgbool('uut_signal'):
+                df.loc[i, 'uut signal [V]'] = uut_signal
+
+
         # Save results
         self.log('[STATUS] Calibration sequence complete!')
-        self.results = pd.DataFrame({'time': times, 'calibration pressure': cal, 'test unit pressure': uut})
+        self.results = df
         return self.results
     
     def generate_report(self, resultspath):
@@ -95,7 +126,7 @@ class CalibrationSequence:
     # Helpers
     # ~~~~~~~
 
-    def _apply_setpoint(self, sp):
+    def _prep_setpoint(self, sp):
         '''
         Communicates with the PLC to apply a setpoint.
         Basically mimicks "Set Pressure" button on UniStream HMI.
@@ -182,31 +213,69 @@ class CalibrationSequence:
 
             time.sleep(0.01) # a 100Hz sample rate seemed to work alright for settling time.
 
-    def _record_data(self, times, cal, uut):
+    def _get_user_input(self):
+        '''
+        Prompts the operator for the measured pressure for each unit under test.
+        '''
+        num_units = self.config.getg('num_test_units', cast=int)
+        values = []
+
+        for n in range(num_units):
+            prompt_text = f'Enter UUT {n+1} pressure ({self.unit})'
+            self.log(f'[STATUS] Waiting for UUT {n+1} pressure...')
+            
+            value = self.prompt(prompt_text)
+            
+            values.append(float(value) if value is not None else np.nan)
+
+        return values
+
+    def _record(self):
         '''
         Once a setpoint is reached, samples data from the MKS 1 sensor on the cart
         as well as the unit under test at a regular sampling rate, for a designated
         amount of time.
 
-        :param times: An existing list of times corresponding to sample points from previous setpoints. This function appends new times.
-        :param cal: The existing list of sample points from previous setpoints for the MKS 1 sensor.
-        :param uut: The existing list of sample points from previous setpoints for the unit under test.
-        :return times: The same as the input but appended with new sample point times.
-        :return cal: The same as the input but appended with new sample point pressures.
-        :return uut: The same as the input but appended with new sample point pressures.
+        If manual entry is selected, the pressure is not recorded until the user enters the 
+        measured pressure for each unit under test. It is reccomended to select a short 
+        wait time, so that data is recorded only directly after the user enters the uut
+        measurement--these values should theoretically be taken at the exact same time.
+
+        **FUTURE** I should add a buffer of reference measurements, maybe on yet another
+        thread; this way the the system can just grab the exact measurement averaged around
+        the exact time point that the user enters the uut pressure, and the reference/uut
+        measurements are compared at exactly the same time. 
+
+        :return ref_pressure: pressure recorded from the cal cart's reference transducer.
+        :return uut_signal: If a device is plugged into the PLC input reserved for a uut device,
+            the raw signal is recorded. Otherwise this value returns None.
         '''
-        # Check settings for how long to record and sampling rate
+        # Check settings for how long to record, sampling rate, and whether to collect a uut signal
         setpoint_wait = self.config.getg('setpoint_wait')
         sample_rate = self.config.getg('sample_rate')
+        uut_connected = self.config.getgbool('uut_signal')
 
+        # Make lists to keep track of data
+        ref_pressures = []
+        uut_signals = []
+
+        # Start recording and keep track of time
         record_start = time.time()
         while time.time() - record_start < setpoint_wait:
             # Collect data from MKS 1 sensor
-            cal_value = self.plc.read_float(self.ad['MKS 1 pressure'])
-            uut_value = self.plc.read_float(self.ad['UUT pressure'])
-            times.append(time.time())
-            cal.append(cal_value)
-            uut.append(uut_value)
+            p = self.plc.read_float(self.ad['MKS 1 pressure'])
+            ref_pressures.append(p)
+            # Collect data from uut
+            if uut_connected:
+                u = self.plc.read_float(self.ad['UUT pressure'])
+                uut_signals.append(u)
             # Wait
             time.sleep(1.0 / sample_rate)
-        return times, cal, uut
+
+        ref_pressure = np.mean(np.array(ref_pressures))
+        if uut_connected:
+            uut_signal = np.mean(np.array(uut_signals))
+        else:
+            uut_signal = None
+        
+        return ref_pressure, uut_signal

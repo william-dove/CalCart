@@ -37,6 +37,13 @@ CONVERSION = {
     'kPa': 0.133322
 }
 
+# List of standard presets and the corresponding INI files for those standards.
+STANDARDS = {
+    '<select>': None,
+    'MKS1': 'MKS1.ini',
+    'Test': 'TestStandard2.ini',
+}
+
 # Default values for the "DEFAULT" section of the config .ini
 # This is now outdated; the dictionary config.settings.SETTINGS is preferred: it is a 
 # dictionary of dataclass objects with various bits of information, including INI 
