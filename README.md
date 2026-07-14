@@ -121,8 +121,6 @@ The GUI should be fairly straightforward; for a more detailed description see th
 
 ### Todo
 
-- Print to PDF calibration report
-
 ### Startup procedure (PLC code)
 
 Basic system implemented. Future:
@@ -134,8 +132,7 @@ Basic system implemented. Future:
 ### Generate reports based on excel template
 
 - Add a setting during the calibration for whether to generate a report.
-- Add the rest of the report fields to the settings window
-- Conver the Excel report to a PDF if possible, or make it a user option.
+- Convert the Excel report to a PDF if possible, or make it a user option.
 - Don't let the user proceed with the calibration unless all required customer info has been entered.
 - **Important**: Add in setpoint data to the excel sheet. Probably will need more options in the user settings on how exactly this will work.
 
