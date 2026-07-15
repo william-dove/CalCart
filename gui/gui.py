@@ -247,7 +247,8 @@ class GUI(tk.Tk):
         '''
         load_path = filedialog.askopenfilename(
             defaultextension='.ini',
-            filetypes=[("INI file", "*.ini")]
+            filetypes=[("INI file", "*.ini")],
+            initialdir='./config/configurations/'
         )
         if load_path.endswith('.ini'):
             self.config.load(load_path) # Error handling done here
@@ -274,7 +275,8 @@ class GUI(tk.Tk):
         # Save the configuration
         save_path = filedialog.asksaveasfilename(
             defaultextension='.ini',
-            filetypes=[("INI file", "*.ini")]
+            filetypes=[("INI file", "*.ini")],
+            initialdir='./config/configurations/'
         )
         if not save_path:
             self.log('[STATUS] Save cancelled.')
@@ -301,7 +303,8 @@ class GUI(tk.Tk):
 
     def choose_resultsdir(self):
             save_dir = filedialog.askdirectory(
-                title='Choose a Results Folder'
+                title='Choose a Results Folder',
+                initialdir='./data/'
             )
             os.makedirs(save_dir, exist_ok=True)
             self.resultsdir.set(save_dir)
@@ -349,7 +352,7 @@ class GUI(tk.Tk):
                     self.log_from_thread,
                     self.prompt_from_thread,
                 )
-                
+
                 cal_seq.run()
                 cal_seq.save_results(self.resultsdir.get())
                 cal_seq.generate_report(self.resultsdir.get())
