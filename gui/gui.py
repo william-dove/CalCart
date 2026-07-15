@@ -13,13 +13,13 @@ from utils.constants import ADDRESSES, STANDARDS
 
 # Other
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, simpledialog
 from tkinter import ttk
 
 import threading
 import os
 import queue
-from tkinter import simpledialog
+import pandas as pd
 
 
 class GUI(tk.Tk):
@@ -70,7 +70,7 @@ class GUI(tk.Tk):
         
         # Initialize attributes
         self.configpath = tk.StringVar(value='<--- Select a configuration.')
-        self.resultspath = tk.StringVar(value="<--- Choose where to save calibration data.")
+        self.resultsdir = tk.StringVar(value="<--- Choose where to save calibration data.")
         self.statusvar = tk.StringVar(value='Status: waiting for action...') # Displays current activities
         self.is_busy = False # Indicator on when a calibration is being made
 
@@ -259,7 +259,8 @@ class GUI(tk.Tk):
             self._refresh_widgets()
 
             # Set the units on the PLC
-            self.plc.set_units(self.config.getg('unit', cast=str))
+            if self.plc.connected:
+                self.plc.set_units(self.config.getg('unit', cast=str))
             
         else: # Don't do anything if the user picks a bad path
             return
@@ -298,12 +299,12 @@ class GUI(tk.Tk):
     # Calibration sequence
     # ~~~~~~~~~~~~~~~~~~~~
 
-    def choose_resultspath(self):
-            save_path = filedialog.asksaveasfilename(
-                defaultextension=".csv",
-                filetypes = [("comma-separated value file", "*.csv"), ("Excel file", "*.xlsx")]
+    def choose_resultsdir(self):
+            save_dir = filedialog.askdirectory(
+                title='Choose a Results Folder'
             )
-            self.resultspath.set(save_path)
+            os.makedirs(save_dir, exist_ok=True)
+            self.resultsdir.set(save_dir)
 
     def prompt_from_thread(self, prompt):
         '''
@@ -348,11 +349,12 @@ class GUI(tk.Tk):
                     self.log_from_thread,
                     self.prompt_from_thread,
                 )
+                
+                cal_seq.run()
+                cal_seq.save_results(self.resultsdir.get())
+                cal_seq.generate_report(self.resultsdir.get())
 
-                results = cal_seq.run()
-
-                self._save_results(results)
-                self.log(f'[STATUS] Calibration data saved to {self.resultspath.get()}')
+                self.log(f'[STATUS] Calibration data saved to {self.resultsdir.get()}')
 
             except Exception as e:
                 self.log_from_thread(f"[ERROR] {e}")
@@ -374,19 +376,7 @@ class GUI(tk.Tk):
             self.log('[STATUS] Calibration already in progress.')
             return
         
-        save_path = self.resultspath.get()
-        save_dir, save_filename = os.path.split(save_path)
-        save_dir = save_dir or '.' # If the directory is the current directory.
-
-        if not save_path or save_path.startswith("<---"):
-            self.log('[WARNING] No save path selected, cancelling operation.')
-            return
-        
-        if not save_filename.endswith(('.csv', '.xlsx')):
-            self.log('[WARNING] Invalid save file format, cancelling. Please select a .csv or .xlsx file.')
-            return
-        
-        if not os.path.isdir(save_dir):
+        if not os.path.isdir(self.resultsdir.get()):
             self.log('[WARNING] Invalid save directory, cancelling operation.')
             return
 
@@ -397,17 +387,6 @@ class GUI(tk.Tk):
             target=worker,
             daemon=True
         ).start()
-
-    def _save_results(self, results):
-        '''
-        Saves the results.
-        '''
-        save_path = self.resultspath.get()
-
-        if save_path.endswith(".csv"):
-            results.to_csv(save_path, index=True)
-        elif save_path.endswith(".xlsx"):
-            results.to_excel(save_path, index=True)
 
     # -------------------------------------------------------------------------------------------------------------------------
 
@@ -446,6 +425,7 @@ class GUI(tk.Tk):
         self.plc.close()
         self.quit()
         self.destroy()
+    
 
     def status(self, args=None):
         '''
@@ -504,18 +484,22 @@ class GUI(tk.Tk):
 
         command: report
 
-        :args[0]: path to save results at.
+        :args[0]: Path to fake results excel file.
+        :args[1]: directory to save report in.
         '''
+        os.makedirs(args[1], exist_ok=True)
         try:
             fake = CalibrationSequence(
                 self.plc,
                 self.config,
-                self.log
+                self.log_from_thread,
+                self.prompt_from_thread
             )
-            fake.generate_report(args[0])
+
+            res = pd.read_excel(args[0], index_col=0)
+
+            fake.generate_report(args[1], results=res)
+            self.log('Report saved.')
 
         except Exception as e:
             self.log(f'[ERROR] {e}.')
-
-        finally:
-            self.log('Report saved.')

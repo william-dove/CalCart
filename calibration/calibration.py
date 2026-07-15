@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import numpy as np
 import xlwings as xw
+import os
 from utils.constants import ADDRESSES
 from config.settings import SETTINGS
 
@@ -94,29 +95,65 @@ class CalibrationSequence:
         self.results = df
         return self.results
     
-    def generate_report(self, resultspath):
+    def save_results(self, resultsdir):
+        '''
+        Saves the raw results as an excel file.
+
+        **FUTURE** I might also provide an option to save the raw data as a csv.
+        '''
+        save_path = os.path.join(resultsdir, 'results.xlsx')
+        self.results.to_excel(save_path, index=True)
+
+    def generate_report(self, resultsdir, results: pd.DataFrame = None):
         '''
         Makes a PDF report after running a calibration sequence from the GUI.
 
-        Currently does not include setpoint data.
         Currently saves an excel file, not a PDF.
+        Currently only works with one UUT. Raw UUT signal is not 
+        included in the report.
+        Doesn't yet include UUT error, though this should be si,ple
+        enough to implement.
+
+        :param resultsdir: The directory to save the report.
+        :param resuts: Optional excel file to get results from. If
+            none is provided, the most recent result stored in the 
+            `self.results` attribute is used.
         '''
-        def fill(resultspath):
+        if results is None:
+            results = self.results
+
+        def fill():
             with xw.App(visible=False) as app:
                 wb = app.books.open('calibration/template.xltx')
                 ws = wb.sheets['Sheet1']
 
-                # Fill in blanks
+                # Fill in header info
                 for s in SETTINGS:
                     if s.report_cell is not None:
                         val = self.config.get(s.section, s.key, cast=str)
                         cell = s.report_cell
                         ws[cell].value = val
 
-                wb.save(resultspath)
+                # Fill in setpoint results (currently for 1 UUT only.)
+                report_row = 60 # The "setpoint" column in the report is in cells A60:A70,
+                                # The "standard" column is B60:B70, and the "instrument"
+                                # column is C60:C70.
+                for sp_num, row in results.iterrows():
+                    sp_cell = f'A{report_row}'
+                    std_cell = f'B{report_row}'
+                    inst_cell = f'C{report_row}'
+
+                    ws[sp_cell].value = sp_num
+                    ws[std_cell].value = row['reference/standard pressure']
+                    ws[inst_cell].value = row['uut 1']
+
+                    report_row += 1
+
+                save_path = os.path.join(resultsdir, 'report.xlsx')
+                wb.save(save_path)
 
         try:
-            fill(resultspath)
+            fill()
         except Exception as e:
             self.log(f'[ERROR] {e}.\nFailed to open Excel file. Check if the file is already open in Excel.')
 

@@ -69,8 +69,8 @@ class FileFrame(ttk.LabelFrame):
         ttk.Label(self, textvariable=self.root.configpath, anchor="w").grid(column=1, row=0, sticky="ew")
 
         # Save data button
-        ttk.Button(self, text='Results Directory', command=self.root.choose_resultspath, width='20').grid(column=0, row=1)
-        ttk.Label(self, textvariable=self.root.resultspath, anchor="w").grid(column=1, row=1, sticky="ew")
+        ttk.Button(self, text='Results Directory', command=self.root.choose_resultsdir, width='20').grid(column=0, row=1)
+        ttk.Label(self, textvariable=self.root.resultsdir, anchor="w").grid(column=1, row=1, sticky="ew")
 
         # Save buttons
         ttk.Button(self, text='Apply Changes', command=self.root.widgets_to_config).grid(column=0, row=2, sticky='w')
@@ -135,15 +135,17 @@ class GeneralSettingsFrame(ttk.LabelFrame):
             self.scrollable, text='General Settings', font=('TkDefaultFont', 10, 'bold')
         ).pack(fill='x', pady=(0, 5))
 
-        for s in [s for s in SETTINGS if s.section == 'general']:
+        # Entry/checkbutton widgets
+        for s in SETTINGS:
+            if s.section != 'general':
+                continue
+
             if s.widget_type == 'entry':
                 self._entry(s.label, s.section, s.key)
             elif s.widget_type == 'checkbutton':
                 self._checkbutton(s.label, s.section, s.key)
 
-        
-
-        # Units
+        # Units widget
         row = ttk.Frame(self.scrollable)
         row.pack(fill='x', pady=2)
         ttk.Label(
