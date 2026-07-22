@@ -19,15 +19,15 @@ class ConsoleFrame(ttk.LabelFrame):
         # Initialize command dictionary
         self.commands = {
             'help': self._help,
+            'status': self.root.status,
+            'connect': self.root.connect,
+            'bypass': self.root.bypass,
+            'stop': self.root.shutdown,
             'cls': self._clear,
             'echo': self._echo,
-            'status': self.root.status,
-            'stop': self.root.shutdown,
             'busy': self.root.make_busy,
-            'bypass': self.root.bypass,
-            'connect': self.root.connect,
-            'report': self.root.report,
             'apply': self.root.widgets_to_config,
+            'report': self.root.report,
         }
 
         # Build window

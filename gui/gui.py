@@ -349,13 +349,14 @@ class GUI(tk.Tk):
                 cal_seq = CalibrationSequence(
                     self.plc,
                     self.config,
+                    self.resultsdir.get(),
                     self.log_from_thread,
                     self.prompt_from_thread,
                 )
 
                 cal_seq.run()
-                cal_seq.save_results(self.resultsdir.get())
-                cal_seq.generate_report(self.resultsdir.get())
+                cal_seq.save_results()
+                cal_seq.generate_report()
 
                 self.log(f'[STATUS] Calibration data saved to {self.resultsdir.get()}')
 
@@ -390,6 +391,9 @@ class GUI(tk.Tk):
             target=worker,
             daemon=True
         ).start()
+
+        # Start monitoring the PID status
+        self.plc.monitor_pid_status(log_callback=self.log_from_thread)
 
     # -------------------------------------------------------------------------------------------------------------------------
 
@@ -495,13 +499,14 @@ class GUI(tk.Tk):
             fake = CalibrationSequence(
                 self.plc,
                 self.config,
+                args[1],
                 self.log_from_thread,
                 self.prompt_from_thread
             )
 
             res = pd.read_excel(args[0], index_col=0)
 
-            fake.generate_report(args[1], results=res)
+            fake.generate_report(results=res)
             self.log('Report saved.')
 
         except Exception as e:

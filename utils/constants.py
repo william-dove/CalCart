@@ -14,7 +14,11 @@ ADDRESSES = {
     'MKS Zero pressure': 106,
     'Setpoint pressure': 108,
     'pressure_units': 110,
-    'UUT pressure': 111
+    'UUT pressure': 111,
+    'PID Configuration.Control Value Proportional': 113,
+    'PID Configuration.Control Value Integral': 115,
+    'PID Configuration.Control Value Derivative': 117,
+    'PID Configuration.Status': 119,
 }
 
 # Pressure units dictionary (dict key == value of pressure_units variable in UniLogic)

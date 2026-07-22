@@ -1,7 +1,13 @@
 #modbus/client.py
 from pymodbus.client import ModbusTcpClient
 import threading
-from utils.modbus_helpers import read_float, write_float, requires_connection
+import time
+from utils.modbus_helpers import (
+    read_float, 
+    write_float, 
+    read_int32,
+    requires_connection,
+)
 from utils.constants import ADDRESSES, UNITS
 
 class Slave:
@@ -103,6 +109,19 @@ class Slave:
                 raise ConnectionError(f'Write error: {resp}')
 
     @requires_connection
+    def read_int32(self, address):
+        '''
+        Reads the 32-bit Int (INT16).
+        '''
+        with self._lock:
+            resp = self.master.read_input_registers(address=address, count=2)
+
+            if resp.isError():
+                raise ConnectionError(f'Read error: {resp}')
+            
+            return read_int32(resp.registers)
+
+    @requires_connection
     def get_units(self):
         '''
         Reads the 16-bit Int (INT16) which represents the active unit.
@@ -133,6 +152,54 @@ class Slave:
 
             if resp.isError():
                 raise ConnectionError(f'Write error: {resp}')
+
+    def monitor_pid_status(self, log_callback=print):
+        '''
+        Prints an update whenever the UniLogic PID status changes.
+        (See UniLogic Help forms for status meaning)
+
+        :param log: Callable to display update messages.
+        '''
+        def monitor():
+            log_callback('[DEBUG] PID monitor thread started.')
+            last_status = None
+            while True:
+                if self._lock.acquire(blocking=False):
+                    #log_callback('[DEBUG] Acquired PID monitor lock.')
+                    try:
+                        resp = self.master.read_input_registers(
+                            address=ADDRESSES['PID Configuration.Status'], 
+                            count=1
+                        )
+                        
+                        if resp.isError():
+                            log_callback(f'[ERROR] {resp}')
+                            continue
+                        
+                        pid_status = resp.registers[0]
+
+                        #log_callback(f"[DEBUG] PID status raw value = {pid_status}")
+
+                        if pid_status != last_status:
+                            log_callback(f'[STATUS] PID Status update: {pid_status}')
+                            last_status = pid_status
+
+                    except Exception as e:
+                        log_callback(f'[WARNING] PID monitor failed: {e}')
+
+                    finally:
+                        self._lock.release()
+
+                # If lock wasn't available, just try later
+                #else:
+                    #log_callback('[DEBUG] PID monitor lock busy.')
+                time.sleep(1.0)
+
+        threading.Thread(
+            target=monitor,
+            daemon=True
+        ).start()
+
 
     def close(self):
         self.connected = False

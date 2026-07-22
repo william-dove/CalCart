@@ -44,12 +44,14 @@ CalCart
 +---main.py
 +---calibration
 ¦   +---calibration.py
-+---cli
-¦   +---cli.py
+¦   +---template.xltx
 +---config
 ¦   +---loader.py
+¦   +---settings.py
 +---gui
 ¦   +---gui.py
+¦   +---frames.py
+¦   +---cli.py
 +---modbus
 ¦   +---client.py
 +---old
@@ -67,8 +69,12 @@ The following classes are used by `main.py` when the application is started:
 
 - `modbus.client.Slave` (`/modbus/client.py`): Controls PLC communication.
 - `config.loader.ConfigLoader` (`/config/loader.py`): Loads, saves, and accesses configuration `.ini` files to customize a calibration procedure.
-- `cli.cli.CLI` (`/cli/cli.py`): Command-line interface; allows the user to quickly perform main functions using commands.
 - `gui.gui.GUI` (`/gui/gui.py`): Graphical user interface; allows the user to perform all functions through a Tkinter-based graphical application.
+
+Additional classes are used within `gui.py`, contained in the same subdirectory.
+
+The following objects are used:
+
 - `utils.constants.ADDRESSES` (`/utils/constants.py`): Dictionary of Modbus addresses assigned within UniLogic for the `modbus.client.Slave` instance to reference.
 - `utils.constants.UNITS` (`/utils/constants.py`): Dictionary of pressure units with the integer key they have been assigned in UniLogic; allows the user to choose between multiple pressure units.
 
@@ -78,20 +84,18 @@ On startup, `main.py` completes the following actions in order:
 
 1. An instance of `modbus.client.Slave` is created using the PLC's IP address and attemts communication by querying the value of `pressure_units` from the PLC. If successful, a message displaying the active pressure units is displayed.
 2. An instance of `config.loader.ConfigLoader` is created and loads a configuration if provided.
-3. An instance of `cli.cli.CLI` is created and the `Slave` and `ConfigLoader` instances are referenced as attributes of `CLI`. If the attributes are modified, the original `Slave` and `ConfigLoader` instances will also be modified (mutated)
-4. An instance of `gui.gui.GUI` is created and the same `Slave` and `ConfigLoader` istances are referenced as attributes of `GUI`. Like with the CLI, if these attributes are modified, the original objects being rederenced will be mutated.
-5. A worker thread is opened and waits at an input block for a user command. Inputs pass commands as methods of the `CLI` class.
-6. Main loop: the program is blocked at the `GUI(tk.Tk).mainloop` method of the GUI object until the user does something on the GUI.
+3. An instance of `gui.gui.GUI` is created and the `Slave` and `ConfigLoader` instances are referenced as attributes of `GUI`. If the attributes are modified, the original `Slave` and `ConfigLoader` instances will also be modified (mutated)
+4. Main loop: the program is blocked at the `GUI(tk.Tk).mainloop` method of the GUI object until the user does something on the GUI (i.e. enters a command or presses a button).
 
-When the user enters the "cal" command in the CLI or clicks the "Run Calibration Sequence" button in the GUI, the calibration sequecne begins. Within `cli.py` or `gui.py`, respectively, this will create an instance of the class `calibration.calibration.CalibrationSequece`, using the attributes referencing the `Slave` and `ConfigLoader` instances. This is a stateless instance of `CalibrationSequence`, which is only referenced during that calibration procedure. When the calibration procedure is finished, the instance is discarded and the results are saved.
+When the user enters the "cal" command in the CLI or clicks the "Run Calibration Sequence" button in the GUI, the calibration sequecne begins. This will open a worker thread and create an instance of the class `calibration.calibration.CalibrationSequece`, using the attributes referencing the `Slave` and `ConfigLoader` instances. This is a stateless instance of `CalibrationSequence`, which is only referenced during that calibration procedure. When the calibration procedure is finished, the instance is discarded and the results are saved.
 
 ### Class Reference Heirarchy
 
 Class references can be tracked along the following flow chart:
 
 ```
-main.py is executed -----> `Slave` instance created        -----> `CLI` and `GUI` created (referencing -----> User loads or creates config -----> `CalibrationSequence` instance created  
-                    -----> `ConfigLoader` instance created -----> `Slave` & `ConfigLoader` instances)  -----> .ini & begins calibration    ----->  using `Slave` & `ConfigLoader` references
+main.py is executed -----> `Slave` instance created        -----> `GUI` created (referencing -----> User loads or creates config -----> `CalibrationSequence` instance created  
+                    -----> `ConfigLoader` instance created -----> `Slave` & `ConfigLoader`)  -----> .ini & begins calibration    ----->  using `Slave` & `ConfigLoader`
 ```
 
 
@@ -104,10 +108,8 @@ main.py is executed -----> `Slave` instance created        -----> `CLI` and `GUI
 ```
 - "help"..............: displays a list of valid commands.
 - "status"............: displays the three pressure transducer readings.
-- "new config"........: begins the procedure for making a new .ini using command line user inputs.
-- "load config".......: loads an existing configuration from a .ini file.
-- "view config".......: displays the currently active configuration options.
-- "cal"...............: begins the calibration procedure.
+- "connect"...........: attempts to establish a connection with the PLC via Ethernet.
+- "bypass"............: bypasses the PLC startup sequence.
 - "stop"..............: exits the program.
 - "cls"...............: clears the command promp screen.
 ```
@@ -123,7 +125,7 @@ The GUI should be fairly straightforward; for a more detailed description see th
 
 ### Startup procedure (PLC code)
 
-Basic system implemented. Future:
+Basic startup procedure implemented. Future:
 
 - Use the system time for the 4 hr timer, this way if the system gets shut off it doesn't automatically reset. Actually, probably the best way to implement this is by adding a check on startup--if the system was running less than 15 minutes ago, don't run startup, or at least make it an option to skip.
 - Maybe use a different transducer for the <100 micron check--the micro ion tends to overshoot the pressure in that range so it takes a while to reach the threshold.
@@ -134,7 +136,8 @@ Basic system implemented. Future:
 - Add a setting during the calibration for whether to generate a report.
 - Convert the Excel report to a PDF if possible, or make it a user option.
 - Don't let the user proceed with the calibration unless all required customer info has been entered.
-- **Important**: Add in setpoint data to the excel sheet. Probably will need more options in the user settings on how exactly this will work.
+
+Right now, setpoint data can be added to the report, but only for one UUT. No error, in/out of calibration, etc. additional data. Need to update this.
 
 ### Other
 

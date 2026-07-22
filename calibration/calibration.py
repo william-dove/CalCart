@@ -15,12 +15,13 @@ class CalibrationSequence:
     After the calibration is complete, the instance is discarded.
 
     __init__ parameters:
-    :param plc: class Slave
-    :param config: class ConfigLoader
-    :param addresses: dict of Modbus addresses assigned by PLC
+    :param plc: (class Slave)
+    :param config: (class ConfigLoader)
+    :param resultsdir: (String) directory for saving results.
     :param log_callback: callable used to emit status messages in the Tk main thread.
+    :param prompt_callback: callable used to prompt the user for a device's reading during manual calibration.
     '''
-    def __init__(self, plc, config, log_callback, prompt_callback=None):
+    def __init__(self, plc, config, resultsdir, log_callback, prompt_callback=None):
         '''
         Initialize object references.
             - `log_callback` is a method of the `GUI` class, which is called here
@@ -32,10 +33,11 @@ class CalibrationSequence:
         '''
         self.plc = plc
         self.config = config
-        self.ad = ADDRESSES # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
+        self.resultsdir = resultsdir
         self.log = log_callback
         self.prompt = prompt_callback
 
+        self.ad = ADDRESSES # dictionary of addresses. The only reason it's `ad`` and not `addresses` is because I'm lazy.
         self.unit = self.config.getg('unit', cast=str)
 
     def run(self):
@@ -46,9 +48,20 @@ class CalibrationSequence:
         '''
         self.log('[STATUS] Starting calibration...')
 
+        # Get setpoint data
         setpoints = self.config.get_setpoints() # list of tuples of form (<setpoint pressure>, <setpoint error tolerance>)
 
-        columns = ['setpoint', 'setpoint pressure', 'setpoint max error', 'reference/standard pressure']
+        # Prep results table
+        columns = [
+            'setpoint', 
+            'setpoint pressure', 
+            'setpoint max error', 
+            'reference/standard pressure',
+            'setpoint successfully reached'
+            'PID Control Value Proportional',
+            'PID Control Value Integral',
+            'PID Control Value Derivative',
+        ]
         if self.config.getgbool('uut_signal'):
             columns.append('uut signal [V]')
         if self.config.getgbool('manual_entry'):
@@ -74,17 +87,29 @@ class CalibrationSequence:
             else:
                 self._check_autotune()
 
+            # Keep track of PID info (determined via autotune procedure)
+            df.loc[i, 'PID Control Value Proportional'] = self.plc.read_int32(self.ad['PID Configuration.Control Value Proportional'])
+            df.loc[i, 'PID Control Value Integral'] = self.plc.read_int32(self.ad['PID Configuration.Control Value Integral'])
+            df.loc[i, 'PID Control Value Derivative'] = self.plc.read_int32(self.ad['PID Configuration.Control Value Derivative'])
+
+            # Activate PID to reach the setpoint. Wait until settled.
             settled = self._set_pressure(pressure, max_err)
             if not settled:
+                df.loc[i, 'setpoint successfully reached'] = 0
                 self.log(f'[STATUS] Skipping setpoint ({sp} {self.unit})')
                 continue
 
+            df.loc[i, 'setpoint successfully reached'] = 1
+
+            # Once settled, wait for user to input device readouts.
             if self.config.getgbool('manual_entry'):
                 values = self._get_user_input()
                 for n in range(self.config.getg('num_test_units', cast=int)):
                     df.loc[i, f'uut {n+1}'] = values[n]
-            
-            ref_pressure, uut_signal = self._record()
+
+            # Record data for the septoint.
+            ref_pressure, uut_signal = self._record(i)
+
             df.loc[i, 'reference/standard pressure'] = ref_pressure
             if self.config.getgbool('uut_signal'):
                 df.loc[i, 'uut signal [V]'] = uut_signal
@@ -95,16 +120,16 @@ class CalibrationSequence:
         self.results = df
         return self.results
     
-    def save_results(self, resultsdir):
+    def save_results(self):
         '''
         Saves the raw results as an excel file.
 
         **FUTURE** I might also provide an option to save the raw data as a csv.
         '''
-        save_path = os.path.join(resultsdir, 'results.xlsx')
+        save_path = os.path.join(self.resultsdir, 'results.xlsx')
         self.results.to_excel(save_path, index=True)
 
-    def generate_report(self, resultsdir, results: pd.DataFrame = None):
+    def generate_report(self, results: pd.DataFrame = None):
         '''
         Makes a PDF report after running a calibration sequence from the GUI.
 
@@ -114,7 +139,6 @@ class CalibrationSequence:
         Doesn't yet include UUT error, though this should be si,ple
         enough to implement.
 
-        :param resultsdir: The directory to save the report.
         :param resuts: Optional excel file to get results from. If
             none is provided, the most recent result stored in the 
             `self.results` attribute is used.
@@ -149,7 +173,7 @@ class CalibrationSequence:
 
                     report_row += 1
 
-                save_path = os.path.join(resultsdir, 'report.xlsx')
+                save_path = os.path.join(self.resultsdir, 'report.xlsx')
                 wb.save(save_path)
 
         try:
@@ -221,6 +245,10 @@ class CalibrationSequence:
         setpoint_timeout = self.config.getg('setpoint_timeout')
         timeout = time.time() + setpoint_timeout # 10 minute timeout rn
 
+        # Wait for a guaranteed waiting period before attempting to settle.
+        pre_settle_wait = self.config.getg('pre_wait')
+        time.sleep(pre_settle_wait)
+
         # Wait for the setpoint to settle.
         setpoint_settle = self.config.getg('setpoint_settle') # how long the setpoint must be stable to begin data collection.
         settle_start = None
@@ -267,7 +295,7 @@ class CalibrationSequence:
 
         return values
 
-    def _record(self):
+    def _record(self, sp_num):
         '''
         Once a setpoint is reached, samples data from the MKS 1 sensor on the cart
         as well as the unit under test at a regular sampling rate, for a designated
@@ -293,25 +321,40 @@ class CalibrationSequence:
         uut_connected = self.config.getgbool('uut_signal')
 
         # Make lists to keep track of data
-        ref_pressures = []
-        uut_signals = []
+        times = []
+        ref_datapoints = []
+        uut_datapoints = []
 
         # Start recording and keep track of time
         record_start = time.time()
         while time.time() - record_start < setpoint_wait:
+            # Collect recording timestamp
+            times.append(time.time())
             # Collect data from MKS 1 sensor
             p = self.plc.read_float(self.ad['MKS 1 pressure'])
-            ref_pressures.append(p)
+            ref_datapoints.append(p)
             # Collect data from uut
             if uut_connected:
                 u = self.plc.read_float(self.ad['UUT pressure'])
-                uut_signals.append(u)
+                uut_datapoints.append(u)
             # Wait
             time.sleep(1.0 / sample_rate)
 
-        ref_pressure = np.mean(np.array(ref_pressures))
+        # Save raw data
+        df = pd.DataFrame({
+            'time': times,
+            f'reference pressure [{self.unit}]': ref_datapoints
+        })
         if uut_connected:
-            uut_signal = np.mean(np.array(uut_signals))
+            df['uut signal [V]'] = uut_datapoints
+
+        save_path = os.path.join(self.resultsdir, f'raw_setpoint_{sp_num}.csv')
+        df.to_csv(save_path)
+
+        # Average the data for the setpoint and return
+        ref_pressure = np.mean(np.array(ref_datapoints))
+        if uut_connected:
+            uut_signal = np.mean(np.array(uut_datapoints))
         else:
             uut_signal = None
         

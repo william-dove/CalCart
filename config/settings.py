@@ -16,8 +16,8 @@ SETTINGS = [
     # --------------------
     Setting(
         section="general",
-        key="setpoint_wait",
-        label="Setpoint wait time [s]",
+        key="setpoint_wait", # Future: change name to collection_time
+        label="Data collection time [s]",
         default="2",
     ),
     Setting(
@@ -26,6 +26,12 @@ SETTINGS = [
         label="Sample rate [Hz]",
         default="10",
     ),
+    Setting(
+        section='general',
+        key='pre_wait',
+        label='Pre-settling wait time [s]',
+        default='0',
+        ),
     Setting(
         section="general",
         key="setpoint_settle",

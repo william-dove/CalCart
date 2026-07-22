@@ -31,6 +31,14 @@ def write_float(value, swapped=True):
             regs = regs[::-1]
     return list(regs)
 
+def read_int32(regs, swapped=True):
+    if swapped:
+        regs = regs[::-1]
+
+    packed = struct.pack('>HH', regs[0], regs[1])
+    return struct.unpack('>i', packed)[0]
+
+
 
 def requires_connection(func):
     '''
