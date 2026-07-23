@@ -11,7 +11,7 @@ from config.settings import SETTINGS
 
 class CalibrationSequence:
     '''
-    A stateless class which is instantiated within the `GUI` to execute a calibration sequence.
+    A stateless class which is instantiated to execute a calibration sequence.
     After the calibration is complete, the instance is discarded.
 
     __init__ parameters:
@@ -29,6 +29,7 @@ class CalibrationSequence:
             - `prompt_callback` allows the GUI to provide a pressure input dialog
                 from the Tk main thread when manual UUT entry is enabled.
 
+        Store ADDRESSES in a constant attribute.
         Determine units from config.
         '''
         self.plc = plc
@@ -43,6 +44,7 @@ class CalibrationSequence:
     def run(self):
         '''
         Runs a calibration sequence using the plc and config specified during instantiation.
+        Returns the results as a dataframe, though this feature is not really used anymore.
 
         :return: dataframe containing results of calibration sequence.
         '''
@@ -122,9 +124,7 @@ class CalibrationSequence:
     
     def save_results(self):
         '''
-        Saves the raw results as an excel file.
-
-        **FUTURE** I might also provide an option to save the raw data as a csv.
+        Saves the results table as an excel file.
         '''
         save_path = os.path.join(self.resultsdir, 'results.xlsx')
         self.results.to_excel(save_path, index=True)

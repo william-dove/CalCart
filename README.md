@@ -48,6 +48,8 @@ CalCart
 +---config
 ¦   +---loader.py
 ¦   +---settings.py
+¦   +---configurations
+¦   +---standards
 +---gui
 ¦   +---gui.py
 ¦   +---frames.py
@@ -63,7 +65,7 @@ CalCart
 
 Lower-level control/PLC code is implemented in the UniLogic project file `CalCart.ulpr`. It's just held here to keep the whole project in one place.
 
-The rest of the directory is for the python project, controlled by `main.py`. Different functions of the application are assigned to Python Classes within designated subdirectories/scripts.
+The rest of the files are for the python project, orchestrated by `main.py`. Different functions of the application are assigned to Python Classes within designated subdirectories/scripts.
 
 The following classes are used by `main.py` when the application is started:
 
@@ -73,10 +75,13 @@ The following classes are used by `main.py` when the application is started:
 
 Additional classes are used within `gui.py`, contained in the same subdirectory.
 
-The following objects are used:
+The following constant dictionaries (`/utils/constants.py`) are used to store information:
 
-- `utils.constants.ADDRESSES` (`/utils/constants.py`): Dictionary of Modbus addresses assigned within UniLogic for the `modbus.client.Slave` instance to reference.
-- `utils.constants.UNITS` (`/utils/constants.py`): Dictionary of pressure units with the integer key they have been assigned in UniLogic; allows the user to choose between multiple pressure units.
+- `utils.constants.ADDRESSES`: Dictionary of Modbus addresses assigned within UniLogic for the `modbus.client.Slave` instance to reference.
+- `utils.constants.UNITS`: Dictionary of pressure units with the integer key they have been assigned in UniLogic; allows the user to choose between multiple pressure units.
+- `utils.constants.CONVERSION`: Conversion factors for each unit from Torr.
+
+Metadata surrrounding each adjustable calibration setting is contained by attributes of the `config.settings.Setting` DataClass. Each instance of the class contains info like the setting name, INI section, INI key, description, and default value. Instances are stored in a list object, `config.settings.SETTINGS`.
 
 ### Startup
 
@@ -101,7 +106,17 @@ main.py is executed -----> `Slave` instance created        -----> `GUI` created 
 
 ## Usage
 
-### CLI Operation
+### Installation
+
+`git clone https://github.com/william-dove/CalCart`
+
+### Starting the program
+
+Execulte `main.py` in a command line Python environment.
+
+(In the future I want to compile the program into an executable, which is apparently something you can do in python).
+
+### Embedded CLI commands
 
 (no quotes)
 
@@ -114,24 +129,24 @@ main.py is executed -----> `Slave` instance created        -----> `GUI` created 
 - "cls"...............: clears the command promp screen.
 ```
 
-### GUI Operation
+### GUI usage
 
 The GUI should be fairly straightforward; for a more detailed description see the functional specification.
 
 
 ## Future
 
-### Todo
-
 ### Startup procedure (PLC code)
 
-Basic startup procedure implemented. Future:
+This is all contained by the lower-level PLC code. Right now, when the PLC is first powered up it goes through a sequence of "startup" screens which prompt the user to complete a series of steps before beginning a claibraiton. In the future I should expand this to:
 
 - Use the system time for the 4 hr timer, this way if the system gets shut off it doesn't automatically reset. Actually, probably the best way to implement this is by adding a check on startup--if the system was running less than 15 minutes ago, don't run startup, or at least make it an option to skip.
 - Maybe use a different transducer for the <100 micron check--the micro ion tends to overshoot the pressure in that range so it takes a while to reach the threshold.
 - Actually use 4 hr timer instead of just telling the user to wait 4 hrs.
 
 ### Generate reports based on excel template
+
+Right now I use the `xlwings` Python library to open the Excel file `template.xltx`, edit the fields in the appropriate cells, and save a copy in the results folder.
 
 - Add a setting during the calibration for whether to generate a report.
 - Convert the Excel report to a PDF if possible, or make it a user option.
